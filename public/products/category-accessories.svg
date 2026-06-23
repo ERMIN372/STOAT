@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1250" viewBox="0 0 1000 1250" role="img" aria-label="Аксессуары">
+  <rect width="1000" height="1250" fill="#EeEbE4"/>
+  <text x="500" y="665" font-family="Helvetica, Arial, sans-serif" font-size="150" font-weight="800" letter-spacing="-4" text-anchor="middle" fill="#000000" fill-opacity="0.06">GOODS</text>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <text x="72" y="118" font-size="30" font-weight="700" letter-spacing="6" fill="#1a1a1a">STOAT</text>
+    <rect x="72" y="1082" width="90" height="6" fill="#ff5a29"/>
+    <text x="72" y="1160" font-size="72" font-weight="800" letter-spacing="-2" fill="#161616">Аксессуары</text>
+  </g>
+</svg>
