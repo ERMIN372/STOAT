@@ -6,8 +6,8 @@ import { NewsletterForm } from "@/components/layout/newsletter-form";
 
 const helpLinks = [
   { href: "/shop", label: "Все товары" },
-  { href: "#", label: "Доставка и оплата" },
-  { href: "#", label: "Возврат" },
+  { href: "/offer", label: "Доставка и оплата" },
+  { href: "/offer#returns", label: "Возврат" },
   { href: "#", label: "Таблица размеров" },
 ];
 
@@ -120,10 +120,10 @@ export function Footer() {
         <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center">
           <p>© {new Date().getFullYear()} STOAT. Все права защищены.</p>
           <div className="flex gap-5">
-            <Link href="#" className="hover:text-foreground">
+            <Link href="/privacy" className="hover:text-foreground">
               Политика конфиденциальности
             </Link>
-            <Link href="#" className="hover:text-foreground">
+            <Link href="/offer" className="hover:text-foreground">
               Оферта
             </Link>
           </div>
