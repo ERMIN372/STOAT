@@ -175,8 +175,12 @@ export default function OfferPage() {
             </>
           ) : null}
           <br />
-          Адрес: {seller.address}
-          <br />
+          {seller.address ? (
+            <>
+              Адрес: {seller.address}
+              <br />
+            </>
+          ) : null}
           E-mail: <a href={`mailto:${seller.email}`}>{seller.email}</a>
           <br />
           Телефон: <a href={`tel:${seller.phoneHref}`}>{seller.phone}</a>

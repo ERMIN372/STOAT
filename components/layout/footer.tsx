@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Instagram, Send, Youtube } from "lucide-react";
 
 import { categories } from "@/data/categories";
+import { seller } from "@/data/legal";
 import { NewsletterForm } from "@/components/layout/newsletter-form";
 
 const helpLinks = [
@@ -86,21 +87,20 @@ export function Footer() {
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
               <li>
                 <a
-                  href="mailto:hello@stoat.store"
+                  href={`mailto:${seller.email}`}
                   className="transition-colors hover:text-foreground"
                 >
-                  hello@stoat.store
+                  {seller.email}
                 </a>
               </li>
               <li>
                 <a
-                  href="tel:+74950000000"
+                  href={`tel:${seller.phoneHref}`}
                   className="transition-colors hover:text-foreground"
                 >
-                  +7 (495) 000-00-00
+                  {seller.phone}
                 </a>
               </li>
-              <li>Москва, ул. Образцовая, 1</li>
             </ul>
             <div className="mt-5 flex gap-2">
               {socials.map(({ href, label, icon: Icon }) => (
