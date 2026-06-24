@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { QuantityStepper } from "@/components/cart/quantity-stepper";
 import { categoryBySlug } from "@/data/categories";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn, formatPrice, isSizeInStock } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
 import type { Product } from "@/types";
 
@@ -24,11 +24,19 @@ export function ProductDetail({ product }: { product: Product }) {
   const openCart = useCartStore((s) => s.openCart);
 
   const [color, setColor] = useState(product.colors[0]?.name ?? "");
-  const [size, setSize] = useState(product.sizes[0] ?? "");
+  // Default to the first size that's actually in stock.
+  const [size, setSize] = useState(
+    product.sizes.find((s) => isSizeInStock(product, s)) ??
+      product.sizes[0] ??
+      ""
+  );
   const [quantity, setQuantity] = useState(1);
 
+  const sizeAvailable = isSizeInStock(product, size);
+  const canAdd = product.inStock && sizeAvailable;
+
   function handleAdd() {
-    if (!product.inStock) return;
+    if (!canAdd) return;
     addItem(product, color, size, quantity);
     toast.success("Добавлено в корзину", {
       description: `${product.name} · ${color} · ${size}`,
@@ -101,17 +109,23 @@ export function ProductDetail({ product }: { product: Product }) {
         <div className="mt-3 flex flex-wrap gap-2">
           {product.sizes.map((s) => {
             const active = s === size;
+            const available = isSizeInStock(product, s);
             return (
               <button
                 key={s}
                 type="button"
-                onClick={() => setSize(s)}
+                onClick={() => available && setSize(s)}
+                disabled={!available}
                 aria-pressed={active}
+                title={available ? undefined : "Нет в наличии"}
                 className={cn(
                   "min-w-11 rounded-md border px-3 py-2 text-sm transition-colors",
-                  active
-                    ? "border-foreground bg-foreground font-medium text-background"
-                    : "border-input hover:border-foreground"
+                  !available &&
+                    "cursor-not-allowed border-dashed text-muted-foreground line-through opacity-50",
+                  available &&
+                    (active
+                      ? "border-foreground bg-foreground font-medium text-background"
+                      : "border-input hover:border-foreground")
                 )}
               >
                 {s}
@@ -129,9 +143,13 @@ export function ProductDetail({ product }: { product: Product }) {
           size="xl"
           className="flex-1"
           onClick={handleAdd}
-          disabled={!product.inStock}
+          disabled={!canAdd}
         >
-          {product.inStock ? "В корзину" : "Нет в наличии"}
+          {!product.inStock
+            ? "Нет в наличии"
+            : !sizeAvailable
+              ? "Размер недоступен"
+              : "В корзину"}
         </Button>
       </div>
 

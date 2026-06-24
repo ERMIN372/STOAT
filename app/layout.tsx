@@ -3,10 +3,6 @@ import { Inter } from "next/font/google";
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { CartDrawer } from "@/components/cart/cart-drawer";
-import { Toaster } from "@/components/ui/sonner";
 
 // Cyrillic subset is required — the storefront copy is in Russian.
 const inter = Inter({
@@ -32,6 +28,11 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Root layout: html/body, fonts and theme only. The storefront chrome
+ * (header/footer/cart/toasts) lives in app/(site)/layout.tsx so that the
+ * embedded Sanity Studio at /studio can render full-screen without it.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -44,15 +45,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex min-h-screen flex-col">
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
-
-          {/* Global overlays: slide-out cart + toast notifications. */}
-          <CartDrawer />
-          <Toaster />
+          {children}
         </ThemeProvider>
       </body>
     </html>

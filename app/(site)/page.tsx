@@ -5,10 +5,13 @@ import { CategoryTiles } from "@/components/home/category-tiles";
 import { ProductGrid } from "@/components/product/product-grid";
 import { SectionHeading } from "@/components/section-heading";
 import { Button } from "@/components/ui/button";
-import { getNewArrivals } from "@/data/products";
+import { getNewArrivals } from "@/lib/catalog";
 
-export default function HomePage() {
-  const newArrivals = getNewArrivals();
+// Re-fetch from Sanity at most once a minute so edits в Studio appear live.
+export const revalidate = 60;
+
+export default async function HomePage() {
+  const newArrivals = await getNewArrivals();
 
   return (
     <>

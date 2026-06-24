@@ -9,22 +9,27 @@ import { ProductGrid } from "@/components/product/product-grid";
 import { SectionHeading } from "@/components/section-heading";
 import { categoryBySlug } from "@/data/categories";
 import {
+  getAllProducts,
   getProductById,
   getRelatedProducts,
-  products,
-} from "@/data/products";
+} from "@/lib/catalog";
 
-/** Pre-render every product page at build time (SSG). */
-export function generateStaticParams() {
+// Refresh product pages from Sanity at most once a minute (ISR).
+export const revalidate = 60;
+
+/** Pre-render the known product pages at build time (SSG). New products added
+ *  later render on-demand and are then cached. */
+export async function generateStaticParams() {
+  const products = await getAllProducts();
   return products.map((p) => ({ id: p.id }));
 }
 
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
   params: { id: string };
-}): Metadata {
-  const product = getProductById(params.id);
+}): Promise<Metadata> {
+  const product = await getProductById(params.id);
   if (!product) return { title: "Товар не найден" };
   return {
     title: product.name,
@@ -32,11 +37,15 @@ export function generateMetadata({
   };
 }
 
-export default function ProductPage({ params }: { params: { id: string } }) {
-  const product = getProductById(params.id);
+export default async function ProductPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const product = await getProductById(params.id);
   if (!product) notFound();
 
-  const related = getRelatedProducts(product);
+  const related = await getRelatedProducts(product);
   const category = categoryBySlug[product.category];
 
   return (
