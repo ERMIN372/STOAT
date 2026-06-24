@@ -17,7 +17,6 @@ import {
   DELIVERY_OPTIONS,
   submitOrder,
   type DeliveryMethod,
-  type OrderPayload,
 } from "@/lib/order";
 import { selectTotalPrice, useCartStore } from "@/store/cart";
 
@@ -54,28 +53,35 @@ export function CheckoutForm() {
     if (submitting) return;
 
     setSubmitting(true);
-    const payload: OrderPayload = {
+    const result = await submitOrder({
       customer: { ...form, delivery },
-      items,
-      subtotal,
-      deliveryPrice,
-      total,
-    };
+      items: items.map((i) => ({
+        productId: i.productId,
+        color: i.color,
+        size: i.size,
+        quantity: i.quantity,
+      })),
+    });
 
-    const result = await submitOrder(payload);
-    setSubmitting(false);
-
-    if (result.ok) {
-      setOrderId(result.orderId);
-      clear();
-      toast.success("Заказ оформлен", {
-        description: `Номер заказа: ${result.orderId}`,
-      });
-    } else {
-      toast.error("Не удалось оформить заказ", {
-        description: result.error,
-      });
+    if (!result.ok) {
+      setSubmitting(false);
+      toast.error("Не удалось оформить заказ", { description: result.error });
+      return;
     }
+
+    // Online payment available → go to the ЮKassa confirmation page.
+    if (result.redirectUrl) {
+      window.location.href = result.redirectUrl;
+      return; // keep the button disabled while the browser navigates away
+    }
+
+    // No payment configured yet → order accepted as a request.
+    setSubmitting(false);
+    setOrderId(result.orderId);
+    clear();
+    toast.success("Заказ оформлен", {
+      description: `Номер заявки: ${result.orderId}`,
+    });
   }
 
   if (!mounted) {
@@ -308,13 +314,14 @@ export function CheckoutForm() {
               disabled={submitting}
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? "Отправляем…" : "Оформить заказ"}
+              {submitting ? "Оформляем…" : "Оформить заказ"}
             </Button>
 
-            {/* No online payment yet — see lib/order.ts for the ЮKassa seam. */}
+            {/* Payment goes through ЮKassa when configured; otherwise the order
+                is accepted as a request. See app/api/checkout/route.ts. */}
             <p className="mt-3 text-center text-xs text-muted-foreground">
-              Нажимая кнопку, вы отправляете заявку. Менеджер свяжется с вами для
-              подтверждения и оплаты.
+              Оплата онлайн через ЮKassa или по согласованию с менеджером.
+              Нажимая кнопку, вы соглашаетесь с условиями обработки заказа.
             </p>
           </div>
         </aside>
