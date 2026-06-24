@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Check, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import { toast } from "sonner";
 
@@ -101,10 +102,12 @@ export function ProductDetail({ product }: { product: Product }) {
       <div className="mt-6">
         <div className="flex items-baseline justify-between">
           <span className="text-sm font-medium">Размер</span>
-          {/* TODO(sizes): link to a real size guide modal. */}
-          <button className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+          <Link
+            href="/size-guide"
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
             Таблица размеров
-          </button>
+          </Link>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {product.sizes.map((s) => {

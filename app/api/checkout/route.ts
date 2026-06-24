@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 
+import { seller } from "@/data/legal";
 import { getAllProducts } from "@/lib/catalog";
-import { DELIVERY_OPTIONS, type CheckoutRequest } from "@/lib/order";
+import { sendOrderEmail } from "@/lib/email";
 import { escapeHtml, sendTelegram } from "@/lib/notify";
-import { formatPrice, isSizeInStock } from "@/lib/utils";
+import { DELIVERY_OPTIONS, type CheckoutRequest } from "@/lib/order";
+import {
+  createOrder,
+  setPaymentId,
+  type OrderConsents,
+  type OrderItem,
+} from "@/lib/orders";
+import { formatPrice, getSizeStock, isSizeInStock } from "@/lib/utils";
 import {
   createPayment,
   yookassaConfigured,
@@ -18,74 +26,104 @@ function generateOrderId(): string {
   return `STOAT-${stamp}-${rand}`;
 }
 
+const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+const phoneDigits = (s: string) => s.replace(/\D/g, "");
+
+function bad(error: string, status = 400) {
+  return NextResponse.json({ ok: false, error }, { status });
+}
+
 /**
- * Checkout: validates the cart server-side (never trusts client prices),
- * notifies the owner, and — if ЮKassa is configured — creates a payment and
- * returns its confirmation URL. Without keys it accepts the order as a request.
+ * Checkout. Validates everything server-side (prices, stock, consents),
+ * PERSISTS the order before payment, then — when ЮKassa is configured — creates
+ * a payment and returns its confirmation URL. Without keys the order is accepted
+ * as a request. Notifications (Telegram/email) are best-effort and never block.
  */
 export async function POST(req: Request) {
   let body: CheckoutRequest;
   try {
     body = (await req.json()) as CheckoutRequest;
   } catch {
-    return NextResponse.json(
-      { ok: false, error: "Некорректный запрос" },
-      { status: 400 }
-    );
+    return bad("Некорректный запрос");
   }
 
-  const { customer, items } = body ?? {};
-  if (!customer?.name || !customer?.phone || !customer?.email || !items?.length) {
-    return NextResponse.json(
-      { ok: false, error: "Заполните контактные данные и добавьте товары" },
-      { status: 400 }
-    );
-  }
+  const { customer, items, consents } = body ?? {};
 
-  // Re-price everything from the live catalogue.
+  // --- contact + consent validation ---
+  if (!customer?.name?.trim()) return bad("Укажите имя");
+  if (!customer.phone || phoneDigits(customer.phone).length < 10)
+    return bad("Укажите корректный телефон");
+  if (!customer.email || !isEmail(customer.email))
+    return bad("Укажите корректный e-mail");
+  if (!items?.length) return bad("Корзина пуста");
+  if (!consents?.offer || !consents?.personalData)
+    return bad("Подтвердите согласие с офертой и обработкой данных");
+
+  const delivery =
+    DELIVERY_OPTIONS.find((d) => d.value === customer.delivery) ??
+    DELIVERY_OPTIONS[0];
+  if (delivery.value !== "pickup" && !customer.address?.trim())
+    return bad("Укажите адрес доставки");
+
+  // --- re-price + stock check from the live catalogue ---
   const catalog = await getAllProducts();
-  const lineItems: {
-    productId: string;
-    name: string;
-    color: string;
-    size: string;
-    quantity: number;
-    price: number;
-  }[] = [];
+  const lineItems: OrderItem[] = [];
 
   for (const it of items) {
     const product = catalog.find((p) => p.id === it.productId);
-    if (!product) {
-      return NextResponse.json(
-        { ok: false, error: `Товар не найден: ${it.productId}` },
-        { status: 400 }
+    if (!product) return bad(`Товар не найден: ${it.productId}`);
+    if (!product.inStock || !isSizeInStock(product, it.size))
+      return bad(`Нет в наличии: ${product.name} (${it.size})`, 409);
+
+    const qty = Math.max(1, Math.min(99, Math.floor(it.quantity)));
+    const available = getSizeStock(product, it.size);
+    if (available !== null && qty > available)
+      return bad(
+        `Недостаточно на складе: ${product.name} (${it.size}) — доступно ${available}`,
+        409
       );
-    }
-    if (!product.inStock || !isSizeInStock(product, it.size)) {
-      return NextResponse.json(
-        { ok: false, error: `Нет в наличии: ${product.name} (${it.size})` },
-        { status: 409 }
-      );
-    }
+
     lineItems.push({
       productId: product.id,
       name: product.name,
       color: it.color,
       size: it.size,
-      quantity: Math.max(1, Math.min(99, Math.floor(it.quantity))),
+      quantity: qty,
       price: product.price,
     });
   }
 
   const subtotal = lineItems.reduce((s, i) => s + i.price * i.quantity, 0);
-  const delivery =
-    DELIVERY_OPTIONS.find((d) => d.value === customer.delivery) ??
-    DELIVERY_OPTIONS[0];
   const total = subtotal + delivery.price;
   const orderId = generateOrderId();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
 
-  // Notify the owner immediately — works even before payment is wired up.
+  const orderConsents: OrderConsents = {
+    offer: Boolean(consents.offer),
+    personalData: Boolean(consents.personalData),
+    marketing: Boolean(consents.marketing),
+    acceptedAt: new Date().toISOString(),
+    docVersion: seller.updatedAt,
+  };
+
+  // --- persist the order BEFORE creating the payment (never lose it) ---
+  const order = await createOrder({
+    orderId,
+    customer: {
+      name: customer.name.trim(),
+      phone: customer.phone.trim(),
+      email: customer.email.trim(),
+      address: customer.address?.trim() ?? "",
+      comment: customer.comment?.trim() || undefined,
+    },
+    delivery: { method: delivery.value, label: delivery.label, price: delivery.price },
+    items: lineItems,
+    subtotal,
+    deliveryPrice: delivery.price,
+    total,
+    consents: orderConsents,
+  });
+
+  // Notify the owner immediately (best-effort).
   const itemsText = lineItems
     .map(
       (i) =>
@@ -109,13 +147,13 @@ export async function POST(req: Request) {
         : "\n⚠️ Оплата при подтверждении (ЮKassa не подключена)")
   );
 
-  // No keys yet → accept as a request ("заявка").
+  // No keys yet → accept as a request and email the customer.
   if (!yookassaConfigured) {
+    await sendOrderEmail(order, "created");
     return NextResponse.json({ ok: true, orderId, redirectUrl: null });
   }
 
   // Optional fiscal receipt (54-ФЗ). Enable with YOOKASSA_SEND_RECEIPT=true.
-  // vat_code 1 = без НДС (typical for самозанятый / УСН). Adjust per your taxes.
   let receipt: YooKassaReceipt | undefined;
   if (process.env.YOOKASSA_SEND_RECEIPT === "true") {
     const vat = Number(process.env.YOOKASSA_VAT_CODE || "1");
@@ -149,17 +187,16 @@ export async function POST(req: Request) {
     };
   }
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
+
   try {
     const payment = await createPayment({
       orderId,
       amount: total,
       description: `STOAT заказ ${orderId}`,
       returnUrl: `${siteUrl}/checkout/success?order=${orderId}`,
-      // Compact, PII-light metadata the webhook uses to decrement stock.
+      // Compact metadata the webhook uses to find the order + decrement stock.
       metadata: {
-        customer_name: customer.name.slice(0, 100),
-        customer_phone: customer.phone.slice(0, 32),
-        delivery: delivery.label,
         items: lineItems
           .map((i) => `${i.productId}:${i.size}:${i.quantity}`)
           .join(","),
@@ -167,19 +204,14 @@ export async function POST(req: Request) {
       receipt,
     });
 
+    await setPaymentId(orderId, payment.id);
+    console.info(`[checkout] order ${orderId} → payment ${payment.id}`);
+
     const url = payment.confirmation?.confirmation_url;
-    if (!url) {
-      return NextResponse.json(
-        { ok: false, error: "ЮKassa не вернула ссылку на оплату" },
-        { status: 502 }
-      );
-    }
+    if (!url) return bad("ЮKassa не вернула ссылку на оплату", 502);
     return NextResponse.json({ ok: true, orderId, redirectUrl: url });
   } catch (err) {
     console.error("[checkout] payment error:", err);
-    return NextResponse.json(
-      { ok: false, error: "Не удалось создать платёж. Попробуйте позже." },
-      { status: 502 }
-    );
+    return bad("Не удалось создать платёж. Попробуйте позже.", 502);
   }
 }

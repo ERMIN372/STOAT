@@ -41,3 +41,16 @@ export function isSizeInStock(
   const entry = product.inventory.find((i) => i.size === size);
   return entry ? entry.stock > 0 : false;
 }
+
+/**
+ * Available units for a size. Returns null when stock is unknown/unlimited
+ * (local demo data without inventory) — callers should skip the cap then.
+ */
+export function getSizeStock(
+  product: Pick<Product, "inventory">,
+  size: string
+): number | null {
+  if (!product.inventory) return null;
+  const entry = product.inventory.find((i) => i.size === size);
+  return entry ? entry.stock : 0;
+}

@@ -29,9 +29,20 @@ export interface CheckoutItemInput {
   quantity: number;
 }
 
+/** Legal consents captured at checkout. */
+export interface CheckoutConsents {
+  /** Agreement with the public offer (required). */
+  offer: boolean;
+  /** Agreement to process personal data (required). */
+  personalData: boolean;
+  /** Opt-in to news/updates (optional). */
+  marketing: boolean;
+}
+
 export interface CheckoutRequest {
   customer: CustomerDetails;
   items: CheckoutItemInput[];
+  consents: CheckoutConsents;
 }
 
 export type OrderResult =

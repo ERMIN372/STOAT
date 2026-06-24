@@ -36,6 +36,11 @@ export function CheckoutForm() {
   const [delivery, setDelivery] = useState<DeliveryMethod>("courier");
   const [submitting, setSubmitting] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [consents, setConsents] = useState({
+    offer: false,
+    personalData: false,
+    marketing: false,
+  });
 
   const deliveryOption =
     DELIVERY_OPTIONS.find((o) => o.value === delivery) ?? DELIVERY_OPTIONS[0];
@@ -52,6 +57,11 @@ export function CheckoutForm() {
     e.preventDefault();
     if (submitting) return;
 
+    if (!consents.offer || !consents.personalData) {
+      toast.error("Подтвердите согласие с офертой и обработкой данных");
+      return;
+    }
+
     setSubmitting(true);
     const result = await submitOrder({
       customer: { ...form, delivery },
@@ -61,6 +71,7 @@ export function CheckoutForm() {
         size: i.size,
         quantity: i.quantity,
       })),
+      consents,
     });
 
     if (!result.ok) {
@@ -306,22 +317,77 @@ export function CheckoutForm() {
               </span>
             </div>
 
+            {/* Legal consents — offer + personal data are required. */}
+            <div className="mt-5 space-y-2.5 text-xs text-muted-foreground">
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={consents.offer}
+                  onChange={(e) =>
+                    setConsents((c) => ({ ...c, offer: e.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-brand"
+                />
+                <span>
+                  Я согласен с{" "}
+                  <Link
+                    href="/offer"
+                    target="_blank"
+                    className="text-brand underline-offset-2 hover:underline"
+                  >
+                    публичной офертой
+                  </Link>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={consents.personalData}
+                  onChange={(e) =>
+                    setConsents((c) => ({
+                      ...c,
+                      personalData: e.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-brand"
+                />
+                <span>
+                  Я согласен на обработку{" "}
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    className="text-brand underline-offset-2 hover:underline"
+                  >
+                    персональных данных
+                  </Link>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={consents.marketing}
+                  onChange={(e) =>
+                    setConsents((c) => ({ ...c, marketing: e.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-brand"
+                />
+                <span>Хочу получать новости и анонсы STOAT (необязательно)</span>
+              </label>
+            </div>
+
             <Button
               type="submit"
               variant="brand"
               size="lg"
-              className="mt-5 w-full"
-              disabled={submitting}
+              className="mt-4 w-full"
+              disabled={submitting || !consents.offer || !consents.personalData}
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
               {submitting ? "Оформляем…" : "Оформить заказ"}
             </Button>
 
-            {/* Payment goes through ЮKassa when configured; otherwise the order
-                is accepted as a request. See app/api/checkout/route.ts. */}
             <p className="mt-3 text-center text-xs text-muted-foreground">
-              Оплата онлайн через ЮKassa или по согласованию с менеджером.
-              Нажимая кнопку, вы соглашаетесь с условиями обработки заказа.
+              Оплата онлайн через ЮKassa. Безопасно.
             </p>
           </div>
         </aside>

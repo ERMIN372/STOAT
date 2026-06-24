@@ -1,22 +1,14 @@
 import Link from "next/link";
-import { Instagram, Send, Youtube } from "lucide-react";
 
 import { categories } from "@/data/categories";
 import { seller } from "@/data/legal";
 import { NewsletterForm } from "@/components/layout/newsletter-form";
 
 const helpLinks = [
-  { href: "/shop", label: "Все товары" },
-  { href: "/offer", label: "Доставка и оплата" },
-  { href: "/offer#returns", label: "Возврат" },
-  { href: "#", label: "Таблица размеров" },
-];
-
-// TODO(contacts): replace with real brand contact details and social URLs.
-const socials = [
-  { href: "#", label: "Instagram", icon: Instagram },
-  { href: "#", label: "Telegram", icon: Send },
-  { href: "#", label: "YouTube", icon: Youtube },
+  { href: "/delivery", label: "Доставка и оплата" },
+  { href: "/returns", label: "Возврат и обмен" },
+  { href: "/size-guide", label: "Таблица размеров" },
+  { href: "/contacts", label: "Контакты" },
 ];
 
 export function Footer() {
@@ -102,18 +94,6 @@ export function Footer() {
                 </a>
               </li>
             </ul>
-            <div className="mt-5 flex gap-2">
-              {socials.map(({ href, label, icon: Icon }) => (
-                <a
-                  key={label}
-                  href={href}
-                  aria-label={label}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:border-brand hover:text-brand"
-                >
-                  <Icon className="h-4 w-4" />
-                </a>
-              ))}
-            </div>
           </div>
         </div>
 
