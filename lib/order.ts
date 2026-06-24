@@ -1,5 +1,3 @@
-import type { CartItem } from "@/types";
-
 export type DeliveryMethod = "courier" | "pickup" | "post";
 
 export const DELIVERY_OPTIONS: {
@@ -23,69 +21,56 @@ export interface CustomerDetails {
   comment?: string;
 }
 
-/** Everything needed to fulfil an order. */
-export interface OrderPayload {
+/** One requested variant. Prices/stock are recomputed server-side. */
+export interface CheckoutItemInput {
+  productId: string;
+  color: string;
+  size: string;
+  quantity: number;
+}
+
+export interface CheckoutRequest {
   customer: CustomerDetails;
-  items: CartItem[];
-  /** Goods subtotal (without delivery). */
-  subtotal: number;
-  deliveryPrice: number;
-  /** subtotal + deliveryPrice. */
-  total: number;
+  items: CheckoutItemInput[];
 }
 
 export type OrderResult =
-  | { ok: true; orderId: string }
+  | { ok: true; orderId: string; redirectUrl?: string | null }
   | { ok: false; error: string };
 
 /**
- * Submit an order.
+ * Submit an order to the server (`app/api/checkout`).
  *
- * ⚠️ Payment is intentionally NOT wired up at launch. This is a stub that
- * "sends" the order somewhere a human can pick it up (email / Telegram) and
- * returns a fake order id. It is the single seam for going live:
- *
- *  1) Real notification — POST the payload to a Next.js Route Handler
- *     (e.g. `app/api/order/route.ts`) that forwards it to:
- *       • email   — Resend / Nodemailer / a transactional provider, or
- *       • Telegram — `https://api.telegram.org/bot<token>/sendMessage`
- *                    (read token + chat id from server-side env vars).
- *
- *  2) Real payment — instead of returning here, create a ЮKassa payment and
- *     redirect the customer to its confirmation URL:
- *
- *       // const payment = await yooKassa.createPayment({
- *       //   amount: { value: total.toFixed(2), currency: "RUB" },
- *       //   confirmation: { type: "redirect", return_url: "<order-status>" },
- *       //   capture: true,
- *       //   description: `STOAT заказ ${orderId}`,
- *       //   metadata: { orderId },
- *       // });
- *       // return { ok: true, orderId, redirectUrl: payment.confirmation.confirmation_url };
- *
- *     Keep secrets server-side only — never ship the ЮKassa secret key to the
- *     client. This function would then call the Route Handler from the browser.
+ * The route validates the cart, notifies the owner, and — when ЮKassa keys are
+ * configured — creates a payment and returns `redirectUrl` (the ЮKassa
+ * confirmation page). Without keys it returns `redirectUrl: null` and the order
+ * is accepted as a request ("заявка"). Secrets live only on the server.
  */
-export async function submitOrder(payload: OrderPayload): Promise<OrderResult> {
+export async function submitOrder(
+  request: CheckoutRequest
+): Promise<OrderResult> {
   try {
-    // Human-readable order id; replace with one from your backend / ЮKassa.
-    const orderId = `STOAT-${Date.now().toString(36).toUpperCase()}`;
-
-    // Simulate the network round-trip to the notification channel.
-    await new Promise((resolve) => setTimeout(resolve, 900));
-
-    // Until a backend exists, surface the payload in the console so it's
-    // verifiable during development. Remove once a Route Handler is in place.
-    if (process.env.NODE_ENV !== "production") {
-      // eslint-disable-next-line no-console
-      console.info("[submitOrder] (stub) order received:", { orderId, ...payload });
+    const res = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error ?? "Не удалось оформить заказ",
+      };
     }
-
-    return { ok: true, orderId };
+    return {
+      ok: true,
+      orderId: data.orderId,
+      redirectUrl: data.redirectUrl ?? null,
+    };
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Не удалось оформить заказ",
+      error: err instanceof Error ? err.message : "Сеть недоступна",
     };
   }
 }
