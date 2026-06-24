@@ -20,12 +20,7 @@ import {
 } from "@/components/ui/sheet";
 import { ProductGrid } from "@/components/product/product-grid";
 import { ShopFilters } from "@/components/shop/shop-filters";
-import {
-  getColorOptions,
-  getSizeOptions,
-  products,
-} from "@/data/products";
-import type { CategorySlug } from "@/types";
+import type { CategorySlug, Product } from "@/types";
 
 type SortOption = "featured" | "price-asc" | "price-desc";
 
@@ -34,6 +29,8 @@ const SORT_LABELS: Record<SortOption, string> = {
   "price-asc": "Сначала дешевле",
   "price-desc": "Сначала дороже",
 };
+
+const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "One Size"];
 
 /** Russian plural: pluralize(2, ["товар","товара","товаров"]). */
 function pluralize(n: number, forms: [string, string, string]): string {
@@ -46,8 +43,10 @@ function pluralize(n: number, forms: [string, string, string]): string {
 
 export function ShopClient({
   initialCategory,
+  products,
 }: {
   initialCategory: CategorySlug | "all";
+  products: Product[];
 }) {
   const [category, setCategory] = useState<CategorySlug | "all">(
     initialCategory
@@ -56,8 +55,26 @@ export function ShopClient({
   const [sizes, setSizes] = useState<string[]>([]);
   const [sort, setSort] = useState<SortOption>("featured");
 
-  const colorOptions = useMemo(() => getColorOptions(), []);
-  const sizeOptions = useMemo(() => getSizeOptions(), []);
+  // Filter options are derived from the live catalogue passed in by the server.
+  const colorOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of products)
+      for (const c of p.colors) if (!seen.has(c.name)) seen.set(c.name, c.hex);
+    return Array.from(seen, ([name, hex]) => ({ name, hex }));
+  }, [products]);
+
+  const sizeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) for (const s of p.sizes) set.add(s);
+    return Array.from(set).sort((a, b) => {
+      const ia = SIZE_ORDER.indexOf(a);
+      const ib = SIZE_ORDER.indexOf(b);
+      if (ia === -1 && ib === -1) return a.localeCompare(b, "ru");
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }, [products]);
 
   const filtered = useMemo(() => {
     const list = products.filter((p) => {
@@ -79,7 +96,7 @@ export function ShopClient({
           (a, b) => Number(b.isNew ?? false) - Number(a.isNew ?? false)
         );
     }
-  }, [category, colors, sizes, sort]);
+  }, [products, category, colors, sizes, sort]);
 
   const toggleColor = (name: string) =>
     setColors((prev) =>
@@ -147,10 +164,7 @@ export function ShopClient({
         </Sheet>
 
         <div className="ml-auto w-48">
-          <Select
-            value={sort}
-            onValueChange={(v) => setSort(v as SortOption)}
-          >
+          <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
             <SelectTrigger aria-label="Сортировка">
               <SelectValue />
             </SelectTrigger>

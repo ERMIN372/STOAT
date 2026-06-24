@@ -1,10 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    // Placeholder product art is shipped as local SVGs in /public/products.
-    // SVGs are blocked by next/image by default; we trust our own assets here.
-    // When real product photography (JPG/PNG/WebP) replaces them, this flag
-    // can be removed and `remotePatterns` added for a CDN / image host.
+    // Real product photography is uploaded to Sanity and served from its CDN.
+    remotePatterns: [{ protocol: "https", hostname: "cdn.sanity.io" }],
+    // Local fallback/placeholder art is SVG, which next/image blocks by
+    // default. We only allow it for our own trusted assets; Sanity photos
+    // (JPG/PNG/WebP) go through the optimizer normally.
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",

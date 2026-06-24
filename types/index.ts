@@ -16,6 +16,13 @@ export interface ProductColor {
   hex: string;
 }
 
+/** Stock for a single size of a product. */
+export interface InventoryEntry {
+  size: string;
+  /** Units available. 0 = this size is sold out. */
+  stock: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -24,10 +31,15 @@ export interface Product {
   category: CategorySlug;
   colors: ProductColor[];
   sizes: string[];
-  /** Paths under /public, e.g. "/products/logo-cap-1.svg". */
+  /** Image URLs (Sanity CDN) or local paths, e.g. "/products/logo-cap-1.svg". */
   images: string[];
   description: string;
   inStock: boolean;
+  /**
+   * Per-size stock. When present, the product page uses it to disable
+   * sold-out sizes. Undefined for local demo data (treated as all-available).
+   */
+  inventory?: InventoryEntry[];
   /** Optional flag used to populate the "Новинки" section on the home page. */
   isNew?: boolean;
 }
