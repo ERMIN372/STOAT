@@ -22,7 +22,7 @@ import {
   ORDER_STATUS_LABELS,
   getOrder,
 } from "@/lib/orders";
-import { formatPrice } from "@/lib/utils";
+import { formatMskDate, formatMskDateTime, formatPrice } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -58,10 +58,9 @@ export default async function AdminOrderPage({
         <OrderStatusBadge status={order.status} />
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        Создан:{" "}
-        {new Date(order.createdAt).toLocaleString("ru-RU")}
+        Создан: {formatMskDateTime(order.createdAt, { dateStyle: "medium", timeStyle: "short" })}
         {order.paidAt &&
-          ` · Оплачен: ${new Date(order.paidAt).toLocaleString("ru-RU")}`}
+          ` · Оплачен: ${formatMskDateTime(order.paidAt, { dateStyle: "medium", timeStyle: "short" })}`}
       </p>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -131,7 +130,7 @@ export default async function AdminOrderPage({
                 оферта {order.consents.offer ? "✓" : "✗"}, ПДн{" "}
                 {order.consents.personalData ? "✓" : "✗"}, новости{" "}
                 {order.consents.marketing ? "✓" : "✗"} (
-                {new Date(order.consents.acceptedAt).toLocaleDateString("ru-RU")})
+                {formatMskDate(order.consents.acceptedAt)})
               </Row>
             )}
           </section>
@@ -142,10 +141,7 @@ export default async function AdminOrderPage({
               {[...order.statusHistory].reverse().map((h, idx) => (
                 <li key={idx} className="flex gap-3">
                   <span className="text-muted-foreground">
-                    {new Date(h.at).toLocaleString("ru-RU", {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
+                    {formatMskDateTime(h.at)}
                   </span>
                   <span className="font-medium">
                     {ORDER_STATUS_LABELS[h.status]}

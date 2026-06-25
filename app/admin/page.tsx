@@ -8,7 +8,7 @@ import {
 } from "@/components/admin/badges";
 import { listOrders } from "@/lib/orders";
 import { ordersConfigured } from "@/lib/sanity/orders-client";
-import { formatPrice } from "@/lib/utils";
+import { formatMskDateTime, formatPrice } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -50,10 +50,7 @@ export default async function AdminOrdersPage() {
                 </div>
                 <p className="mt-1 truncate text-sm text-muted-foreground">
                   {o.customer.name} · {o.customer.phone} ·{" "}
-                  {new Date(o.createdAt).toLocaleString("ru-RU", {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  })}
+                  {formatMskDateTime(o.createdAt)}
                 </p>
               </div>
               <span className="shrink-0 font-semibold tabular-nums">

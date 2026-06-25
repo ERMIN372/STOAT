@@ -20,6 +20,25 @@ export function formatPrice(value: number): string {
   }).format(value);
 }
 
+/** Admin timezone — order timestamps are always shown in Moscow time (МСК). */
+const MSK_TZ = "Europe/Moscow";
+
+/** Format a date/time in Moscow time (МСК) for the admin panel. */
+export function formatMskDateTime(
+  date: string | number | Date,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "short", timeStyle: "short" }
+): string {
+  return new Date(date).toLocaleString("ru-RU", {
+    timeZone: MSK_TZ,
+    ...options,
+  });
+}
+
+/** Format a date (no time) in Moscow time (МСК) for the admin panel. */
+export function formatMskDate(date: string | number | Date): string {
+  return new Date(date).toLocaleDateString("ru-RU", { timeZone: MSK_TZ });
+}
+
 /** Build the stable composite key that identifies a cart line (variant). */
 export function buildCartKey(
   productId: string,
