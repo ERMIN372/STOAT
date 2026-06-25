@@ -1,6 +1,10 @@
 import "server-only";
 
-import { ORDER_STATUS_LABELS, type Order } from "@/lib/orders";
+import {
+  DELIVERY_PROVIDER_LABELS,
+  ORDER_STATUS_LABELS,
+  type Order,
+} from "@/lib/orders";
 import { formatPrice } from "@/lib/utils";
 
 const API_KEY = process.env.RESEND_API_KEY;
@@ -45,13 +49,20 @@ export type OrderEmailKind =
 
 const INTRO: Record<OrderEmailKind, string> = {
   created:
-    "Мы получили ваш заказ. Детали ниже — после оплаты мы начнём сборку.",
-  paid: "Оплата получена, спасибо! Собираем заказ и сообщим, когда отправим.",
-  shipped: "Ваш заказ отправлен. Трек-номер и детали ниже.",
+    "Спасибо за заказ! Мы приняли его в работу. Детали ниже.",
+  paid: "Спасибо за заказ! Мы приняли его в работу.",
+  shipped: "Ваш заказ передан в доставку.",
   canceled: "Ваш заказ отменён. Если это ошибка — просто ответьте на письмо.",
   refunded:
     "Мы оформили возврат. Деньги вернутся на счёт в течение нескольких рабочих дней.",
 };
+
+/** Day-range like "5–12", collapsing equal bounds. */
+function daysRange(min?: number, max?: number): string | null {
+  if (min == null) return null;
+  const hi = max ?? min;
+  return min === hi ? `${min}` : `${min}–${hi}`;
+}
 
 const SUBJECT: Record<OrderEmailKind, (o: Order) => string> = {
   created: (o) => `STOAT — заказ ${o.orderId} оформлен`,
@@ -77,14 +88,38 @@ function body(o: Order, kind: OrderEmailKind): string {
     )
     .join("");
 
-  const track =
-    kind === "shipped" && o.trackingNumber
-      ? `<p>Трек-номер: <b>${esc(o.trackingNumber)}</b></p>`
+  const eta = daysRange(o.delivery?.totalMinDays, o.delivery?.totalMaxDays);
+  const providerLabel = o.delivery?.provider
+    ? DELIVERY_PROVIDER_LABELS[o.delivery.provider]
+    : o.delivery?.label;
+
+  // Preparation + estimated receipt window (shown right after payment/creation).
+  const prepBlock =
+    kind === "created" || kind === "paid"
+      ? `<p style="background:#f5f5f0;border-radius:8px;padding:12px 14px;font-size:14px">
+          Обычно подготовка занимает <b>3–7 рабочих дней</b>. После передачи
+          заказа в доставку мы отправим трек-номер на e-mail.${
+            eta
+              ? `<br/>Ориентировочный срок получения: <b>${eta} рабочих дней</b>.`
+              : ""
+          }
+        </p>`
+      : "";
+
+  // Shipped block: carrier + tracking.
+  const shippedBlock =
+    kind === "shipped"
+      ? `<p style="background:#f5f5f0;border-radius:8px;padding:12px 14px;font-size:14px">
+          Служба доставки: <b>${esc(providerLabel || "—")}</b><br/>
+          Трек-номер: <b>${esc(o.trackingNumber || "—")}</b><br/>
+          <span style="color:#666">Сохраните его для отслеживания. Срок доставки зависит от выбранной службы и города получения.</span>
+        </p>`
       : "";
 
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#161616">
     <h1 style="font-size:22px;letter-spacing:3px;margin:0 0 16px">STOAT</h1>
     <p>${INTRO[kind]}</p>
+    ${prepBlock}
     <p style="color:#666;font-size:13px">Заказ <b>${esc(
       o.orderId
     )}</b> · статус: ${ORDER_STATUS_LABELS[o.status]}</p>
@@ -99,7 +134,7 @@ function body(o: Order, kind: OrderEmailKind): string {
         o.total
       )}</td></tr>
     </table>
-    ${track}
+    ${shippedBlock}
     <p style="font-size:13px;color:#666">Доставка: ${esc(o.delivery.label)}${
       o.customer.address ? ` · ${esc(o.customer.address)}` : ""
     }</p>

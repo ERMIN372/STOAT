@@ -115,6 +115,40 @@ export const product = defineType({
         }),
       ],
     }),
+    defineField({
+      name: "packaging",
+      title: "Вес и габариты упаковки",
+      description:
+        "Используется для расчёта доставки. Если не заполнить, подставятся значения по умолчанию для категории.",
+      type: "object",
+      options: { collapsible: true, collapsed: true },
+      fields: [
+        {
+          name: "weightGrams",
+          title: "Вес 1 шт., г",
+          type: "number",
+          validation: (r) => r.min(0),
+        },
+        {
+          name: "lengthCm",
+          title: "Длина упаковки, см",
+          type: "number",
+          validation: (r) => r.min(0),
+        },
+        {
+          name: "widthCm",
+          title: "Ширина упаковки, см",
+          type: "number",
+          validation: (r) => r.min(0),
+        },
+        {
+          name: "heightCm",
+          title: "Высота упаковки, см",
+          type: "number",
+          validation: (r) => r.min(0),
+        },
+      ],
+    }),
   ],
   preview: {
     select: { title: "name", subtitle: "category", media: "images.0" },

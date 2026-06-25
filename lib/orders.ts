@@ -1,12 +1,16 @@
 import "server-only";
 
 import { ordersClient } from "@/lib/sanity/orders-client";
-import type { DeliveryMethod } from "@/lib/order";
+import type {
+  DeliveryMethodId,
+  DeliveryProvider,
+} from "@/lib/delivery/types";
 
 export type OrderStatus =
   | "pending_payment"
   | "paid"
   | "processing"
+  | "ready_to_ship"
   | "shipped"
   | "delivered"
   | "canceled"
@@ -17,11 +21,19 @@ export type PaymentStatus = "pending" | "succeeded" | "canceled" | "refunded";
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending_payment: "Ожидает оплаты",
   paid: "Оплачен",
-  processing: "В сборке",
-  shipped: "Отправлен",
+  processing: "В подготовке",
+  ready_to_ship: "Готов к отправке",
+  shipped: "Передан в доставку",
   delivered: "Доставлен",
   canceled: "Отменён",
   refunded: "Возврат",
+};
+
+/** Provider labels for the customer-facing copy. */
+export const DELIVERY_PROVIDER_LABELS: Record<DeliveryProvider, string> = {
+  cdek: "СДЭК",
+  russian_post: "Почта России",
+  pickup: "Самовывоз",
 };
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
@@ -35,6 +47,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 export const ADMIN_STATUS_OPTIONS: OrderStatus[] = [
   "paid",
   "processing",
+  "ready_to_ship",
   "shipped",
   "delivered",
   "canceled",
@@ -48,6 +61,44 @@ export interface OrderItem {
   size: string;
   quantity: number;
   price: number;
+}
+
+/**
+ * Full delivery record saved on the order. Carries everything the engine
+ * computed (provider, tariff, price, day windows, address/PVZ, parcel) plus
+ * fulfilment fields filled in later from the admin (shipment id, status).
+ */
+export interface OrderDelivery {
+  provider: DeliveryProvider;
+  method: DeliveryMethodId;
+  label: string;
+  price: number;
+  /** Carrier delivery window (business days). */
+  deliveryMinDays?: number;
+  deliveryMaxDays?: number;
+  /** Preparation window (business days). */
+  productionMinDays?: number;
+  productionMaxDays?: number;
+  /** Total receipt window = preparation + delivery. */
+  totalMinDays?: number;
+  totalMaxDays?: number;
+  /** Destination. */
+  city?: string;
+  address?: string;
+  postalCode?: string;
+  /** CDEK pickup point. */
+  pvzCode?: string;
+  pvzAddress?: string;
+  /** Carrier tariff code. */
+  tariffCode?: string;
+  /** Parcel used for the calculation. */
+  weightGrams?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  /** Fulfilment (set later, from the admin). */
+  shipmentId?: string;
+  shipmentStatus?: string;
 }
 
 export interface OrderConsents {
@@ -75,7 +126,7 @@ export interface Order {
     address: string;
     comment?: string;
   };
-  delivery: { method: DeliveryMethod; label: string; price: number };
+  delivery: OrderDelivery;
   items: OrderItem[];
   subtotal: number;
   deliveryPrice: number;
@@ -96,7 +147,7 @@ const key = () => Math.random().toString(36).slice(2, 12);
 export interface CreateOrderInput {
   orderId: string;
   customer: Order["customer"];
-  delivery: Order["delivery"];
+  delivery: OrderDelivery;
   items: OrderItem[];
   subtotal: number;
   deliveryPrice: number;
@@ -276,5 +327,24 @@ export async function setStockDecremented(orderId: string, value: boolean) {
       .commit();
   } catch (err) {
     console.error(`[orders] setStockDecremented ${orderId}:`, err);
+  }
+}
+
+/** Persist carrier shipment data on the order's delivery record. */
+export async function setShipment(
+  orderId: string,
+  data: { shipmentId?: string; shipmentStatus?: string; trackingNumber?: string }
+) {
+  if (!ordersClient) return;
+  const set: Record<string, unknown> = {};
+  if (data.shipmentId != null) set["delivery.shipmentId"] = data.shipmentId;
+  if (data.shipmentStatus != null)
+    set["delivery.shipmentStatus"] = data.shipmentStatus;
+  if (data.trackingNumber != null) set.trackingNumber = data.trackingNumber;
+  if (Object.keys(set).length === 0) return;
+  try {
+    await ordersClient.patch(docId(orderId)).set(set).commit();
+  } catch (err) {
+    console.error(`[orders] setShipment ${orderId}:`, err);
   }
 }

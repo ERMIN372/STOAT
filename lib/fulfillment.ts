@@ -3,7 +3,12 @@ import "server-only";
 import { sendOrderEmail } from "@/lib/email";
 import { decrementStock, type StockChange } from "@/lib/inventory";
 import { sendTelegram } from "@/lib/notify";
-import { getOrder, markPaid, setStockDecremented } from "@/lib/orders";
+import {
+  getOrder,
+  markPaid,
+  setStockDecremented,
+  updateStatus,
+} from "@/lib/orders";
 import { sanityWriteClient } from "@/lib/sanity/write-client";
 import type { YooKassaPayment } from "@/lib/yookassa";
 
@@ -66,6 +71,13 @@ export async function finalizePaidPayment(
   if (order) {
     await markPaid(order.orderId, payment.id);
     await setStockDecremented(order.orderId, true);
+    // After payment the order only moves to preparation ("В подготовке").
+    // A carrier shipment is NEVER created here — that's a manual admin action.
+    await updateStatus(
+      order.orderId,
+      "processing",
+      "Заказ принят в подготовку"
+    );
     await sendOrderEmail(
       {
         ...order,

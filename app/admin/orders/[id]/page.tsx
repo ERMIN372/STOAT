@@ -14,11 +14,16 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
   changeStatusAction,
+  createShipmentAction,
+  refreshShipmentAction,
+  sendTrackingEmailAction,
   setNoteAction,
+  setTrackingAction,
   shipAction,
 } from "@/app/admin/actions";
 import {
   ADMIN_STATUS_OPTIONS,
+  DELIVERY_PROVIDER_LABELS,
   ORDER_STATUS_LABELS,
   getOrder,
 } from "@/lib/orders";
@@ -37,11 +42,26 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default async function AdminOrderPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { flash?: string };
 }) {
   const order = await getOrder(params.id);
   if (!order) notFound();
+
+  const d = order.delivery;
+  const providerLabel = d.provider
+    ? DELIVERY_PROVIDER_LABELS[d.provider]
+    : d.label;
+  const eta =
+    d.totalMinDays != null
+      ? `${d.totalMinDays}–${d.totalMaxDays ?? d.totalMinDays} раб. дн.`
+      : "—";
+  const carrierDays =
+    d.deliveryMinDays != null
+      ? `${d.deliveryMinDays}–${d.deliveryMaxDays ?? d.deliveryMinDays} раб. дн.`
+      : "—";
 
   return (
     <AdminShell>
@@ -51,6 +71,12 @@ export default async function AdminOrderPage({
       >
         <ChevronLeft className="h-4 w-4" /> Все заказы
       </Link>
+
+      {searchParams.flash && (
+        <p className="mb-4 rounded-md border border-brand/40 bg-brand/5 p-3 text-sm">
+          {searchParams.flash}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">{order.orderId}</h1>
@@ -123,7 +149,42 @@ export default async function AdminOrderPage({
           </section>
 
           <section className="rounded-lg border p-5 text-sm">
-            <h2 className="mb-2 font-semibold">Оплата и доставка</h2>
+            <h2 className="mb-2 font-semibold">Доставка</h2>
+            <Row label="Служба">{providerLabel || "—"}</Row>
+            <Row label="Тариф / способ">
+              {d.label}
+              {d.tariffCode ? ` · код ${d.tariffCode}` : ""}
+            </Row>
+            <Row label="Стоимость (оплачена)">
+              {d.price ? formatPrice(d.price) : "бесплатно"}
+            </Row>
+            {d.city && <Row label="Город">{d.city}</Row>}
+            {d.postalCode && <Row label="Индекс">{d.postalCode}</Row>}
+            {d.address && <Row label="Адрес">{d.address}</Row>}
+            {d.pvzCode && (
+              <Row label="ПВЗ СДЭК">
+                {d.pvzAddress || d.pvzCode}
+                {d.pvzAddress ? ` (${d.pvzCode})` : ""}
+              </Row>
+            )}
+            <Row label="Срок доставки">{carrierDays}</Row>
+            <Row label="Срок получения">{eta}</Row>
+            {d.weightGrams != null && (
+              <Row label="Расчётный вес">
+                {(d.weightGrams / 1000).toFixed(2)} кг
+                {d.lengthCm
+                  ? ` · ${d.lengthCm}×${d.widthCm}×${d.heightCm} см`
+                  : ""}
+              </Row>
+            )}
+            <Row label="ID отправления">{d.shipmentId || "—"}</Row>
+            {d.shipmentStatus && (
+              <Row label="Статус отправления">{d.shipmentStatus}</Row>
+            )}
+          </section>
+
+          <section className="rounded-lg border p-5 text-sm">
+            <h2 className="mb-2 font-semibold">Оплата</h2>
             <Row label="Payment ID">{order.paymentId || "—"}</Row>
             <Row label="Трек-номер">{order.trackingNumber || "—"}</Row>
             {order.consents && (
@@ -161,6 +222,52 @@ export default async function AdminOrderPage({
 
         {/* Right: actions */}
         <aside className="space-y-5">
+          {/* Carrier shipment — manual, after the order is prepared. */}
+          {(d.provider === "cdek" || d.provider === "russian_post") && (
+            <div className="space-y-3 rounded-lg border p-5">
+              <h2 className="font-semibold">Отправление {providerLabel}</h2>
+              <p className="text-xs text-muted-foreground">
+                Создавайте отправление вручную, когда заказ готов к передаче в
+                доставку (статус «Готов к отправке»).
+              </p>
+              <form action={createShipmentAction}>
+                <input type="hidden" name="orderId" value={order.orderId} />
+                <Button type="submit" variant="brand" className="w-full">
+                  {d.shipmentId
+                    ? "Создать отправление повторно"
+                    : `Создать отправление ${providerLabel}`}
+                </Button>
+              </form>
+              {d.provider === "cdek" && d.shipmentId && (
+                <form action={refreshShipmentAction}>
+                  <input type="hidden" name="orderId" value={order.orderId} />
+                  <Button type="submit" variant="outline" className="w-full">
+                    Обновить статус / трек
+                  </Button>
+                </form>
+              )}
+              <form action={setTrackingAction} className="space-y-2">
+                <input type="hidden" name="orderId" value={order.orderId} />
+                <Label htmlFor="track-manual">Трек-номер вручную</Label>
+                <Input
+                  id="track-manual"
+                  name="tracking"
+                  defaultValue={order.trackingNumber || ""}
+                  placeholder="Номер отправления"
+                />
+                <Button type="submit" variant="outline" className="w-full">
+                  Сохранить трек
+                </Button>
+              </form>
+              <form action={sendTrackingEmailAction}>
+                <input type="hidden" name="orderId" value={order.orderId} />
+                <Button type="submit" variant="outline" className="w-full">
+                  Отправить клиенту письмо с треком
+                </Button>
+              </form>
+            </div>
+          )}
+
           <form
             action={shipAction}
             className="space-y-3 rounded-lg border p-5"

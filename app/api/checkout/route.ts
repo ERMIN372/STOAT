@@ -2,13 +2,17 @@ import { NextResponse } from "next/server";
 
 import { seller } from "@/data/legal";
 import { getAllProducts } from "@/lib/catalog";
+import { recomputeQuote } from "@/lib/delivery/engine";
+import { buildParcel, type ParcelLine } from "@/lib/delivery/parcel";
 import { sendOrderEmail } from "@/lib/email";
 import { escapeHtml, sendTelegram } from "@/lib/notify";
-import { DELIVERY_OPTIONS, type CheckoutRequest } from "@/lib/order";
+import { formatDaysRange } from "@/lib/delivery/config";
+import type { CheckoutRequest } from "@/lib/order";
 import {
   createOrder,
   setPaymentId,
   type OrderConsents,
+  type OrderDelivery,
   type OrderItem,
 } from "@/lib/orders";
 import { formatPrice, getSizeStock, isSizeInStock } from "@/lib/utils";
@@ -34,10 +38,10 @@ function bad(error: string, status = 400) {
 }
 
 /**
- * Checkout. Validates everything server-side (prices, stock, consents),
- * PERSISTS the order before payment, then — when ЮKassa is configured — creates
- * a payment and returns its confirmation URL. Without keys the order is accepted
- * as a request. Notifications (Telegram/email) are best-effort and never block.
+ * Checkout. Validates everything server-side (contact, stock, consents AND the
+ * delivery quote — never trusting the client's price), PERSISTS the order before
+ * payment, then — when ЮKassa is configured — creates a payment and returns its
+ * confirmation URL. Notifications (Telegram/email) are best-effort.
  */
 export async function POST(req: Request) {
   let body: CheckoutRequest;
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
     return bad("Некорректный запрос");
   }
 
-  const { customer, items, consents } = body ?? {};
+  const { customer, delivery, items, consents } = body ?? {};
 
   // --- contact + consent validation ---
   if (!customer?.name?.trim()) return bad("Укажите имя");
@@ -59,15 +63,26 @@ export async function POST(req: Request) {
   if (!consents?.offer || !consents?.personalData)
     return bad("Подтвердите согласие с офертой и обработкой данных");
 
-  const delivery =
-    DELIVERY_OPTIONS.find((d) => d.value === customer.delivery) ??
-    DELIVERY_OPTIONS[0];
-  if (delivery.value !== "pickup" && !customer.address?.trim())
-    return bad("Укажите адрес доставки");
+  // --- delivery selection validation ---
+  if (!delivery?.method || !delivery.provider)
+    return bad("Выберите способ доставки");
+  if (delivery.provider !== "pickup") {
+    if (!delivery.city?.trim()) return bad("Укажите город доставки");
+    if (delivery.method === "cdek_pvz" && !delivery.pvzCode)
+      return bad("Выберите пункт выдачи СДЭК");
+    if (delivery.method === "cdek_courier" && !delivery.address?.trim())
+      return bad("Укажите адрес для курьерской доставки");
+    if (
+      delivery.method === "russian_post" &&
+      !/^\d{6}$/.test(delivery.postalCode?.trim() ?? "")
+    )
+      return bad("Укажите индекс (6 цифр) для Почты России");
+  }
 
   // --- re-price + stock check from the live catalogue ---
   const catalog = await getAllProducts();
   const lineItems: OrderItem[] = [];
+  const parcelLines: ParcelLine[] = [];
 
   for (const it of items) {
     const product = catalog.find((p) => p.id === it.productId);
@@ -91,11 +106,64 @@ export async function POST(req: Request) {
       quantity: qty,
       price: product.price,
     });
+    parcelLines.push({ product, quantity: qty });
   }
 
   const subtotal = lineItems.reduce((s, i) => s + i.price * i.quantity, 0);
-  const total = subtotal + delivery.price;
+
+  // --- recompute the delivery quote server-side (do NOT trust client price) ---
+  const parcel = buildParcel(parcelLines);
+  const quote = await recomputeQuote(
+    delivery.method,
+    {
+      city: delivery.city?.trim() ?? "",
+      address: delivery.address?.trim(),
+      postalCode: delivery.postalCode?.trim(),
+    },
+    parcel,
+    subtotal
+  );
+
+  if (!quote) {
+    return bad(
+      "Не удалось подтвердить стоимость доставки. Обновите расчёт и попробуйте снова.",
+      409
+    );
+  }
+
+  const deliveryPrice = quote.price;
+  const total = subtotal + deliveryPrice;
   const orderId = generateOrderId();
+
+  const orderDelivery: OrderDelivery = {
+    provider: quote.provider,
+    method: quote.method,
+    label: quote.label,
+    price: quote.price,
+    deliveryMinDays: quote.deliveryMinDays,
+    deliveryMaxDays: quote.deliveryMaxDays,
+    productionMinDays: quote.productionMinDays,
+    productionMaxDays: quote.productionMaxDays,
+    totalMinDays: quote.totalMinDays,
+    totalMaxDays: quote.totalMaxDays,
+    city: delivery.city?.trim() || undefined,
+    address: delivery.address?.trim() || undefined,
+    postalCode: delivery.postalCode?.trim() || undefined,
+    pvzCode: delivery.pvzCode || undefined,
+    pvzAddress: delivery.pvzAddress || undefined,
+    tariffCode: quote.tariffCode,
+    weightGrams: parcel.weightGrams,
+    lengthCm: parcel.lengthCm,
+    widthCm: parcel.widthCm,
+    heightCm: parcel.heightCm,
+  };
+
+  // A readable single-line address for the order record / notifications.
+  const addressLine =
+    orderDelivery.pvzAddress ||
+    [orderDelivery.postalCode, orderDelivery.city, orderDelivery.address]
+      .filter(Boolean)
+      .join(", ");
 
   const orderConsents: OrderConsents = {
     offer: Boolean(consents.offer),
@@ -112,19 +180,18 @@ export async function POST(req: Request) {
       name: customer.name.trim(),
       phone: customer.phone.trim(),
       email: customer.email.trim(),
-      address: customer.address?.trim() ?? "",
+      address: addressLine,
       comment: customer.comment?.trim() || undefined,
     },
-    delivery: { method: delivery.value, label: delivery.label, price: delivery.price },
+    delivery: orderDelivery,
     items: lineItems,
     subtotal,
-    deliveryPrice: delivery.price,
+    deliveryPrice,
     total,
     consents: orderConsents,
   });
 
-  // A payment must NEVER be created without a saved order. If storage failed
-  // (or isn't configured) and online payment is on, abort before charging.
+  // A payment must NEVER be created without a saved order.
   if (yookassaConfigured && !persisted) {
     console.error(
       `[checkout] order ${orderId} NOT persisted — refusing to create payment`
@@ -148,15 +215,20 @@ export async function POST(req: Request) {
         )} ×${i.quantity} — ${formatPrice(i.price * i.quantity)}`
     )
     .join("\n");
+  const etaText =
+    orderDelivery.totalMinDays != null
+      ? `\n🕒 Срок получения: ${formatDaysRange(
+          orderDelivery.totalMinDays,
+          orderDelivery.totalMaxDays ?? orderDelivery.totalMinDays
+        )}`
+      : "";
   await sendTelegram(
     `🆕 <b>Новый заказ ${orderId}</b>\n${itemsText}\n` +
-      `Доставка: ${delivery.label} — ${
-        delivery.price ? formatPrice(delivery.price) : "бесплатно"
-      }\n<b>Итого: ${formatPrice(total)}</b>\n\n` +
+      `Доставка: ${escapeHtml(quote.label)} — ${
+        deliveryPrice ? formatPrice(deliveryPrice) : "бесплатно"
+      }${etaText}\n<b>Итого: ${formatPrice(total)}</b>\n\n` +
       `👤 ${escapeHtml(customer.name)}\n📞 ${escapeHtml(customer.phone)}\n` +
-      `✉️ ${escapeHtml(customer.email)}\n📦 ${escapeHtml(
-        customer.address || "—"
-      )}\n` +
+      `✉️ ${escapeHtml(customer.email)}\n📦 ${escapeHtml(addressLine || "—")}\n` +
       (customer.comment ? `📝 ${escapeHtml(customer.comment)}\n` : "") +
       (yookassaConfigured
         ? "\n⏳ Ожидает оплаты"
@@ -184,13 +256,13 @@ export async function POST(req: Request) {
           payment_mode: "full_payment",
           payment_subject: "commodity",
         })),
-        ...(delivery.price > 0
+        ...(deliveryPrice > 0
           ? [
               {
-                description: `Доставка (${delivery.label})`,
+                description: `Доставка (${quote.label})`,
                 quantity: "1.000",
                 amount: {
-                  value: delivery.price.toFixed(2),
+                  value: deliveryPrice.toFixed(2),
                   currency: "RUB" as const,
                 },
                 vat_code: vat,
@@ -211,7 +283,6 @@ export async function POST(req: Request) {
       amount: total,
       description: `STOAT заказ ${orderId}`,
       returnUrl: `${siteUrl}/checkout/success?order=${orderId}`,
-      // Compact metadata the webhook uses to find the order + decrement stock.
       metadata: {
         items: lineItems
           .map((i) => `${i.productId}:${i.size}:${i.quantity}`)

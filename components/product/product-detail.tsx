@@ -15,7 +15,7 @@ import { useCartStore } from "@/store/cart";
 import type { Product } from "@/types";
 
 const TRUST = [
-  { icon: Truck, label: "Доставка 1–2 дня" },
+  { icon: Truck, label: "СДЭК и Почта России" },
   { icon: RotateCcw, label: "Возврат 14 дней" },
   { icon: ShieldCheck, label: "Гарантия качества" },
 ];
@@ -155,6 +155,17 @@ export function ProductDetail({ product }: { product: Product }) {
               : "В корзину"}
         </Button>
       </div>
+
+      {/* Availability + preparation note */}
+      {product.inStock && (
+        <div className="mt-5 rounded-lg border bg-muted/30 p-4 text-sm">
+          <p className="font-medium">Доступно для оформления</p>
+          <p className="mt-1 text-muted-foreground">
+            Подготовка заказа: 3–7 рабочих дней. После передачи в доставку
+            отправим трек-номер на e-mail.
+          </p>
+        </div>
+      )}
 
       {/* Trust badges */}
       <ul className="mt-6 grid grid-cols-3 gap-2">
