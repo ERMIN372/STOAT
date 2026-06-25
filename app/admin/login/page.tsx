@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Logo } from "@/components/layout/logo";
 import { loginAction } from "@/app/admin/actions";
 
 export const metadata: Metadata = {
@@ -20,10 +21,8 @@ export default function AdminLoginPage({
   return (
     <div className="container flex min-h-screen flex-col items-center justify-center">
       <form action={loginAction} className="w-full max-w-sm space-y-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-extrabold uppercase tracking-tight">
-            STOAT
-          </h1>
+        <div className="space-y-2">
+          <Logo href={null} tagline markClassName="h-8 w-8" />
           <p className="text-sm text-muted-foreground">Админка заказов</p>
         </div>
 
