@@ -10,6 +10,7 @@ const PROJECTION = groq`{
   description,
   colors[]{ name, hex },
   inventory[]{ size, stock },
+  packaging{ weightGrams, lengthCm, widthCm, heightCm },
   images
 }`;
 

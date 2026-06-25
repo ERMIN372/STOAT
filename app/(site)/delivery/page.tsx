@@ -1,34 +1,67 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
-import { DELIVERY_OPTIONS } from "@/lib/order";
-import { formatPrice } from "@/lib/utils";
+import { PICKUP_ENABLED } from "@/lib/delivery/config";
 
 export const metadata: Metadata = {
   title: "Доставка и оплата",
-  description: "Способы доставки и оплаты заказов STOAT.",
+  description:
+    "СДЭК и Почта России по всей России. Стоимость и сроки рассчитываются автоматически при оформлении заказа.",
 };
 
+const METHODS = [
+  {
+    title: "СДЭК до ПВЗ",
+    text: "Заберите заказ в ближайшем пункте выдачи СДЭК. Стоимость и срок зависят от города и тарифа — рассчитываются при оформлении.",
+  },
+  {
+    title: "СДЭК курьером",
+    text: "Курьер СДЭК привезёт заказ по указанному адресу. Стоимость и срок рассчитываются автоматически при оформлении.",
+  },
+  {
+    title: "Почта России",
+    text: "Доставка по всей России в отделение по индексу получателя. Стоимость и срок рассчитываются по тарифам Почты России.",
+  },
+];
+
 export default function DeliveryPage() {
+  const methods = PICKUP_ENABLED
+    ? [
+        ...METHODS,
+        {
+          title: "Самовывоз после готовности",
+          text: "Бесплатно. Заберите заказ самостоятельно, когда он будет готов — мы сообщим.",
+        },
+      ]
+    : METHODS;
+
   return (
     <div className="container max-w-3xl py-12 sm:py-16">
       <h1 className="text-display text-4xl sm:text-5xl">Доставка и оплата</h1>
       <div className="prose prose-neutral mt-8 max-w-none dark:prose-invert prose-headings:font-semibold prose-h2:mt-10 prose-h2:text-xl prose-a:text-brand">
-        <h2>Доставка</h2>
+        <h2>Как формируется срок</h2>
+        <p>
+          Срок получения заказа складывается из двух этапов: подготовки и
+          доставки.
+        </p>
+        <p>
+          Подготовка заказа обычно занимает <strong>3–7 рабочих дней</strong>.
+          После этого мы передаём заказ в выбранную службу доставки и отправляем
+          трек-номер на e-mail.
+        </p>
+        <p>
+          Стоимость и срок доставки рассчитываются автоматически при оформлении
+          заказа и зависят от города, адреса, выбранной службы и тарифа.
+        </p>
+
+        <h2>Способы доставки</h2>
         <ul>
-          {DELIVERY_OPTIONS.map((o) => (
-            <li key={o.value}>
-              <strong>{o.label}</strong> —{" "}
-              {o.price ? formatPrice(o.price) : "бесплатно"}. {o.hint}.
+          {methods.map((m) => (
+            <li key={m.title}>
+              <strong>{m.title}</strong> — {m.text}
             </li>
           ))}
         </ul>
-        <p>
-          Заказы собираем и передаём в службу доставки в течение 1–2 рабочих
-          дней после оплаты. Итоговые сроки зависят от выбранного способа и
-          региона. Когда заказ отправлен, мы пришлём письмо с трек-номером для
-          отслеживания.
-        </p>
 
         <h2>Оплата</h2>
         <p>
@@ -38,8 +71,7 @@ export default function DeliveryPage() {
         </p>
         <p>
           После успешной оплаты на ваш e-mail придёт подтверждение заказа.
-          Полные условия — в{" "}
-          <Link href="/offer">публичной оферте</Link>.
+          Полные условия — в <Link href="/offer">публичной оферте</Link>.
         </p>
       </div>
     </div>

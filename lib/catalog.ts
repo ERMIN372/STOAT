@@ -24,6 +24,12 @@ interface SanityProductDoc {
   description?: string;
   colors?: { name?: string; hex?: string }[];
   inventory?: { size?: string; stock?: number }[];
+  packaging?: {
+    weightGrams?: number;
+    lengthCm?: number;
+    widthCm?: number;
+    heightCm?: number;
+  };
   images?: unknown[];
 }
 
@@ -50,6 +56,14 @@ function mapDoc(doc: SanityProductDoc): Product {
     inStock: inventory.some((i) => i.stock > 0),
     inventory: inventory.length > 0 ? inventory : undefined,
     isNew: Boolean(doc.isNew),
+    packaging: doc.packaging
+      ? {
+          weightGrams: doc.packaging.weightGrams,
+          lengthCm: doc.packaging.lengthCm,
+          widthCm: doc.packaging.widthCm,
+          heightCm: doc.packaging.heightCm,
+        }
+      : undefined,
   };
 }
 

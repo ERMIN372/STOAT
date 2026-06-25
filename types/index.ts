@@ -23,6 +23,20 @@ export interface InventoryEntry {
   stock: number;
 }
 
+/**
+ * Packed weight + dimensions for a single unit, used by the delivery engine to
+ * calculate carrier tariffs. All fields optional — the engine falls back to
+ * per-category defaults (see lib/delivery/config.ts) when absent.
+ */
+export interface ProductPackaging {
+  /** Weight of one unit, grams. */
+  weightGrams?: number;
+  /** Packed box dimensions, cm. */
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -42,6 +56,8 @@ export interface Product {
   inventory?: InventoryEntry[];
   /** Optional flag used to populate the "Новинки" section on the home page. */
   isNew?: boolean;
+  /** Per-unit packed weight/dimensions for delivery calculation. */
+  packaging?: ProductPackaging;
 }
 
 export interface Category {

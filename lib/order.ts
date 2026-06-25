@@ -1,24 +1,33 @@
-export type DeliveryMethod = "courier" | "pickup" | "post";
+import type {
+  DeliveryMethodId,
+  DeliveryProvider,
+  DeliveryQuote,
+} from "@/lib/delivery/types";
 
-export const DELIVERY_OPTIONS: {
-  value: DeliveryMethod;
-  label: string;
-  price: number;
-  hint: string;
-}[] = [
-  { value: "courier", label: "Курьер", price: 390, hint: "1–2 дня по городу" },
-  { value: "pickup", label: "Самовывоз", price: 0, hint: "Пункт выдачи STOAT" },
-  { value: "post", label: "Почта / СДЭК", price: 290, hint: "3–7 дней по России" },
-];
-
-/** Customer-entered checkout details. */
+/** Customer-entered contact details (delivery lives in its own object now). */
 export interface CustomerDetails {
   name: string;
   phone: string;
   email: string;
-  address: string;
-  delivery: DeliveryMethod;
   comment?: string;
+}
+
+/**
+ * The delivery option chosen in checkout. The server NEVER trusts `price`/days
+ * from here — it recomputes the quote from `provider`/`method` + destination.
+ */
+export interface DeliverySelectionInput {
+  provider: DeliveryProvider;
+  method: DeliveryMethodId;
+  label: string;
+  city: string;
+  address?: string;
+  postalCode?: string;
+  /** CDEK pickup point (required for the "cdek_pvz" method). */
+  pvzCode?: string;
+  pvzAddress?: string;
+  /** Price the client saw — for comparison/logging only. */
+  price?: number;
 }
 
 /** One requested variant. Prices/stock are recomputed server-side. */
@@ -41,6 +50,7 @@ export interface CheckoutConsents {
 
 export interface CheckoutRequest {
   customer: CustomerDetails;
+  delivery: DeliverySelectionInput;
   items: CheckoutItemInput[];
   consents: CheckoutConsents;
 }
@@ -49,13 +59,43 @@ export type OrderResult =
   | { ok: true; orderId: string; redirectUrl?: string | null }
   | { ok: false; error: string };
 
+/** Fetch delivery quotes for the current destination + cart. */
+export async function fetchDeliveryQuotes(input: {
+  city: string;
+  address?: string;
+  postalCode?: string;
+  items: CheckoutItemInput[];
+}): Promise<{ quotes: DeliveryQuote[]; notices?: string[]; error?: string }> {
+  try {
+    const res = await fetch("/api/delivery/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) {
+      return {
+        quotes: data?.quotes ?? [],
+        notices: data?.notices,
+        error: data?.error ?? "Не удалось рассчитать доставку",
+      };
+    }
+    return { quotes: data.quotes ?? [], notices: data.notices };
+  } catch (err) {
+    return {
+      quotes: [],
+      error: err instanceof Error ? err.message : "Сеть недоступна",
+    };
+  }
+}
+
 /**
  * Submit an order to the server (`app/api/checkout`).
  *
- * The route validates the cart, notifies the owner, and — when ЮKassa keys are
- * configured — creates a payment and returns `redirectUrl` (the ЮKassa
- * confirmation page). Without keys it returns `redirectUrl: null` and the order
- * is accepted as a request ("заявка"). Secrets live only on the server.
+ * The route revalidates the cart and the delivery quote, persists the order,
+ * and — when ЮKassa keys are configured — creates a payment and returns
+ * `redirectUrl`. Without keys it returns `redirectUrl: null` (order accepted as
+ * a request). Secrets live only on the server.
  */
 export async function submitOrder(
   request: CheckoutRequest

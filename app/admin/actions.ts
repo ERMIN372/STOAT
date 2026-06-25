@@ -5,11 +5,16 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { ADMIN_COOKIE, computeAdminToken } from "@/lib/admin-auth";
+import {
+  createShipmentForOrder,
+  refreshShipmentStatus,
+} from "@/lib/delivery/shipment";
 import { sendOrderEmail } from "@/lib/email";
 import { incrementStock, type StockChange } from "@/lib/inventory";
 import {
   getOrder,
   setInternalNote,
+  setShipment,
   setStockDecremented,
   setTracking,
   updateStatus,
@@ -98,4 +103,59 @@ export async function setNoteAction(formData: FormData) {
   const note = String(formData.get("note") || "");
   await setInternalNote(orderId, note);
   revalidatePath(`/admin/orders/${orderId}`);
+}
+
+/** Manually save / overwrite a tracking number (no status change). */
+export async function setTrackingAction(formData: FormData) {
+  await assertAdmin();
+  const orderId = String(formData.get("orderId"));
+  const tracking = String(formData.get("tracking") || "").trim();
+  await setShipment(orderId, { trackingNumber: tracking || undefined });
+  revalidatePath(`/admin/orders/${orderId}`);
+  redirect(`/admin/orders/${orderId}?flash=${encodeURIComponent("Трек-номер сохранён")}`);
+}
+
+/**
+ * Create a carrier shipment for a prepared order. Manual — owner triggers this
+ * from the admin once the order is ready, never automatically on payment.
+ */
+export async function createShipmentAction(formData: FormData) {
+  await assertAdmin();
+  const orderId = String(formData.get("orderId"));
+  const order = await getOrder(orderId);
+  if (!order) redirect("/admin");
+
+  const result = await createShipmentForOrder(order!);
+  revalidatePath(`/admin/orders/${orderId}`);
+  redirect(`/admin/orders/${orderId}?flash=${encodeURIComponent(result.message)}`);
+}
+
+/** Pull the latest shipment status / tracking from the carrier (CDEK). */
+export async function refreshShipmentAction(formData: FormData) {
+  await assertAdmin();
+  const orderId = String(formData.get("orderId"));
+  const order = await getOrder(orderId);
+  if (!order) redirect("/admin");
+
+  const result = await refreshShipmentStatus(order!);
+  revalidatePath(`/admin/orders/${orderId}`);
+  redirect(`/admin/orders/${orderId}?flash=${encodeURIComponent(result.message)}`);
+}
+
+/** Email the customer their tracking number ("передан в доставку"). */
+export async function sendTrackingEmailAction(formData: FormData) {
+  await assertAdmin();
+  const orderId = String(formData.get("orderId"));
+  const order = await getOrder(orderId);
+  if (!order) redirect("/admin");
+
+  if (!order!.trackingNumber) {
+    redirect(
+      `/admin/orders/${orderId}?flash=${encodeURIComponent("Сначала добавьте трек-номер")}`
+    );
+  }
+  await sendOrderEmail(order!, "shipped");
+  redirect(
+    `/admin/orders/${orderId}?flash=${encodeURIComponent("Письмо с треком отправлено клиенту")}`
+  );
 }

@@ -12,6 +12,7 @@ const ORDER_VARIANT: Record<OrderStatus, Variant> = {
   pending_payment: "secondary",
   paid: "brand",
   processing: "default",
+  ready_to_ship: "default",
   shipped: "default",
   delivered: "outline",
   canceled: "destructive",
