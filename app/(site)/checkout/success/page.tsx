@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { ClearCartOnMount } from "@/components/cart/clear-cart-on-mount";
 import { seller } from "@/data/legal";
 import { emailConfigured } from "@/lib/email";
+import { finalizePaidPayment } from "@/lib/fulfillment";
 import { getOrder } from "@/lib/orders";
+import { getPayment, yookassaConfigured } from "@/lib/yookassa";
 
 export const metadata: Metadata = {
   title: "Статус заказа",
@@ -14,8 +16,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Where ЮKassa returns the customer after the payment page. The real status is
- * confirmed by the webhook, so we read the order and show the right state:
+ * Where ЮKassa returns the customer after the payment page. As a safety net
+ * (in case the webhook is delayed or not configured), we verify the payment
+ * with ЮKassa here and finalize the order, then show the right state:
  * paid, still processing, or failed/canceled.
  */
 export default async function CheckoutReturnPage({
@@ -24,7 +27,25 @@ export default async function CheckoutReturnPage({
   searchParams: { order?: string };
 }) {
   const orderId = searchParams.order;
-  const order = orderId ? await getOrder(orderId) : null;
+  let order = orderId ? await getOrder(orderId) : null;
+
+  if (
+    order &&
+    order.paymentStatus !== "succeeded" &&
+    order.paymentId &&
+    yookassaConfigured
+  ) {
+    try {
+      const payment = await getPayment(order.paymentId);
+      if (payment.status === "succeeded" && payment.paid) {
+        await finalizePaidPayment(payment);
+        order = (await getOrder(order.orderId)) ?? order;
+      }
+    } catch (err) {
+      console.error("[checkout/success] verify failed:", err);
+    }
+  }
+
   const paymentStatus = order?.paymentStatus ?? "pending";
 
   // --- payment failed / canceled: keep the cart, offer a retry ---
@@ -87,7 +108,7 @@ export default async function CheckoutReturnPage({
           {paid
             ? "Оплата получена — мы начали сборку и сообщим, когда отправим."
             : "Ожидаем подтверждение оплаты. Если оплата прошла, заказ уже у нас."}
-          {emailConfigured && " Подтверждение отправлено на ваш e-mail."}
+          {paid && emailConfigured && " Подтверждение отправлено на ваш e-mail."}
         </p>
       </div>
       <Button asChild variant="brand" size="lg">
