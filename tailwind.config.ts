@@ -64,6 +64,8 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        // Heavy/wide brand wordmark face (Archivo Black) for the hero STOAT.
+        display: ["var(--font-display)", "var(--font-sans)", "sans-serif"],
       },
       keyframes: {
         "accordion-down": {

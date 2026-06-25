@@ -14,7 +14,7 @@ export function Hero() {
       {/* Oversized backdrop wordmark for editorial depth */}
       <span
         aria-hidden
-        className="pointer-events-none absolute -right-6 bottom-[-8%] select-none text-[34vw] font-extrabold leading-none tracking-tighter text-foreground/[0.035] sm:bottom-[-12%]"
+        className="pointer-events-none absolute -right-6 bottom-[-8%] select-none font-display text-[34vw] leading-none tracking-tight text-foreground/[0.035] sm:bottom-[-12%]"
       >
         STOAT
       </span>
@@ -34,15 +34,24 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease, delay: 0.05 }}
-          className="text-display mt-5 text-[clamp(3.5rem,17vw,15rem)]"
+          className="mt-5 font-display text-[clamp(3.5rem,17vw,15rem)] leading-[0.85] tracking-tight"
         >
           STOAT
         </motion.h1>
 
         <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease, delay: 0.12 }}
+          className="mt-4 font-display text-sm uppercase tracking-[0.32em] text-brand sm:text-base"
+        >
+          Streetwear. Clean. Confident.
+        </motion.p>
+
+        <motion.p
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease, delay: 0.15 }}
+          transition={{ duration: 0.7, ease, delay: 0.18 }}
           className="mt-6 max-w-xl text-lg text-muted-foreground sm:text-xl"
         >
           Премиальный streetwear без лишнего. Кепки, футболки и худи в чистом
