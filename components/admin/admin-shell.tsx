@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ErmineMark } from "@/components/brand/ermine-mark";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/app/admin/actions";
 
@@ -11,8 +12,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="container flex h-14 items-center justify-between">
           <Link
             href="/admin"
-            className="font-bold uppercase tracking-tight"
+            className="inline-flex items-center gap-2 font-bold uppercase tracking-tight"
           >
+            <ErmineMark className="h-6 w-6" />
             STOAT · Заказы
           </Link>
           <div className="flex items-center gap-2">

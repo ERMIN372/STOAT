@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { categories } from "@/data/categories";
 import { seller } from "@/data/legal";
+import { Logo } from "@/components/layout/logo";
 import { NewsletterForm } from "@/components/layout/newsletter-form";
 
 const helpLinks = [
@@ -18,10 +19,12 @@ export function Footer() {
         <div className="grid grid-cols-2 gap-10 md:grid-cols-4 lg:grid-cols-5">
           {/* Brand + newsletter */}
           <div className="col-span-2 lg:col-span-2">
-            <p className="text-3xl font-extrabold uppercase tracking-tight">
-              STOAT
-            </p>
-            <p className="mt-3 max-w-sm text-sm text-muted-foreground">
+            <Logo
+              tagline
+              markClassName="h-9 w-9"
+              wordmarkClassName="text-3xl"
+            />
+            <p className="mt-4 max-w-sm text-sm text-muted-foreground">
               Премиальный streetwear для тех, кто двигается быстро. Чёрное,
               белое и ничего лишнего.
             </p>

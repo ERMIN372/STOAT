@@ -32,9 +32,10 @@
     --input: 0 0% 89.8%;
     --ring: 0 0% 3.9%;
 
-    /* STOAT signature accent — a single ember/orange tone over the
-       black & white base. Change these two values to re-skin the brand. */
-    --brand: 14 100% 53%;
+    /* STOAT signature accent — the ember orange (#FF4D00) from the brand
+       reference, over the black & white base. Change these two values to
+       re-skin the brand. */
+    --brand: 18 100% 50%;
     --brand-foreground: 0 0% 8%;
 
     --radius: 0.5rem;
@@ -69,7 +70,7 @@
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
 
-    --brand: 14 100% 56%;
+    --brand: 18 100% 50%;
     --brand-foreground: 0 0% 8%;
   }
 }
