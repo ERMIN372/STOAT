@@ -1,7 +1,10 @@
 import "server-only";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// Order notifications go to the STOAT channel by default. Override with
+// TELEGRAM_CHAT_ID (numeric id or @channelusername). The bot must be an admin
+// of the target channel with the "Post messages" permission.
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "@stoat_shop";
 
 /** Escape user text for Telegram HTML parse mode. */
 export function escapeHtml(s: string): string {
@@ -9,15 +12,17 @@ export function escapeHtml(s: string): string {
 }
 
 /**
- * Send a message to the shop owner's Telegram. No-op (logs to console) when not
- * configured, so order flow never breaks if notifications aren't set up.
- *
- * To enable: create a bot via @BotFather, then set TELEGRAM_BOT_TOKEN and
- * TELEGRAM_CHAT_ID (your chat/channel id) in env.
+ * Send an order notification to the shop's Telegram channel (@stoat_shop by
+ * default, or TELEGRAM_CHAT_ID). No-op (logs to console) when the bot token
+ * isn't set, so the order flow never breaks. Enable by creating a bot via
+ * @BotFather, adding it as an admin of the channel, and setting
+ * TELEGRAM_BOT_TOKEN.
  */
 export async function sendTelegram(text: string): Promise<void> {
-  if (!TOKEN || !CHAT_ID) {
-    console.info("[notify] Telegram not configured. Message:\n" + text);
+  if (!TOKEN) {
+    console.info(
+      "[notify] TELEGRAM_BOT_TOKEN not set — skipping. Message:\n" + text
+    );
     return;
   }
   try {
