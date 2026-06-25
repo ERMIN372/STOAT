@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   };
 
   // --- persist the order BEFORE creating the payment (never lose it) ---
-  const order = await createOrder({
+  const { order, persisted } = await createOrder({
     orderId,
     customer: {
       name: customer.name.trim(),
@@ -123,7 +123,23 @@ export async function POST(req: Request) {
     consents: orderConsents,
   });
 
-  // Notify the owner immediately (best-effort).
+  // A payment must NEVER be created without a saved order. If storage failed
+  // (or isn't configured) and online payment is on, abort before charging.
+  if (yookassaConfigured && !persisted) {
+    console.error(
+      `[checkout] order ${orderId} NOT persisted — refusing to create payment`
+    );
+    await sendTelegram(
+      `⚠️ Заказ ${orderId} НЕ сохранён в Sanity — платёж не создан. ` +
+        `Проверьте SANITY_API_TOKEN и приватный датасет orders.`
+    );
+    return bad(
+      "Не удалось оформить заказ. Попробуйте позже или свяжитесь с нами.",
+      503
+    );
+  }
+
+  // Notify the owner of the new order (best-effort).
   const itemsText = lineItems
     .map(
       (i) =>

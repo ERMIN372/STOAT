@@ -105,11 +105,15 @@ export interface CreateOrderInput {
 }
 
 /**
- * Persist a new order in "pending_payment". Resilient: never throws on a
- * storage failure (checkout must keep working) — it only logs, so payment and
- * notifications still proceed.
+ * Persist a new order in "pending_payment". Returns whether it was actually
+ * saved — the checkout route refuses to create a payment when `persisted` is
+ * false, so we never charge a customer without an order record. In "заявка"
+ * mode (no online payment) the order is still returned so Telegram can capture
+ * it even if storage isn't configured.
  */
-export async function createOrder(input: CreateOrderInput): Promise<Order> {
+export async function createOrder(
+  input: CreateOrderInput
+): Promise<{ order: Order; persisted: boolean }> {
   const now = new Date().toISOString();
   const order: Order = {
     orderId: input.orderId,
@@ -132,7 +136,7 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
       "[orders] orders dataset/token not configured — order NOT persisted. " +
         "Set SANITY_API_TOKEN and create a private dataset (SANITY_ORDERS_DATASET)."
     );
-    return order;
+    return { order, persisted: false };
   }
 
   try {
@@ -144,10 +148,11 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
       statusHistory: order.statusHistory.map((h) => ({ _key: key(), ...h })),
     });
     console.info(`[orders] created ${input.orderId} (${input.total} ₽)`);
+    return { order, persisted: true };
   } catch (err) {
     console.error(`[orders] failed to create ${input.orderId}:`, err);
+    return { order, persisted: false };
   }
-  return order;
 }
 
 export async function getOrder(orderId: string): Promise<Order | null> {
