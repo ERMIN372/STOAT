@@ -6,8 +6,35 @@ import { formatPrice } from "@/lib/utils";
 const API_KEY = process.env.RESEND_API_KEY;
 const FROM = process.env.EMAIL_FROM;
 
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = process.env.SMTP_PORT;
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_SECURE = process.env.SMTP_SECURE;
+
+const hasResend = Boolean(API_KEY);
+const hasSmtp = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
+
+/**
+ * Pick the active email provider.
+ * - EMAIL_PROVIDER=resend → Resend
+ * - EMAIL_PROVIDER=smtp   → SMTP (Nodemailer)
+ * - unset → fall back to whatever is configured (Resend first, then SMTP)
+ * - nothing configured → null (emails are skipped, never throw)
+ */
+function resolveProvider(): "resend" | "smtp" | null {
+  const explicit = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  if (explicit === "resend") return hasResend ? "resend" : null;
+  if (explicit === "smtp") return hasSmtp ? "smtp" : null;
+  if (hasResend) return "resend";
+  if (hasSmtp) return "smtp";
+  return null;
+}
+
+const PROVIDER = resolveProvider();
+
 /** Transactional email is optional — orders never break if it isn't set up. */
-export const emailConfigured = Boolean(API_KEY && FROM);
+export const emailConfigured = Boolean(PROVIDER && FROM);
 
 export type OrderEmailKind =
   | "created"
@@ -80,28 +107,60 @@ function body(o: Order, kind: OrderEmailKind): string {
   </div>`;
 }
 
+async function sendViaResend(
+  to: string,
+  subject: string,
+  html: string
+): Promise<void> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from: FROM, to, subject, html }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  }
+}
+
+async function sendViaSmtp(
+  to: string,
+  subject: string,
+  html: string
+): Promise<void> {
+  // Dynamic import keeps Nodemailer out of any Edge bundle — this module is
+  // only ever called from Node.js-runtime routes/actions.
+  const nodemailer = (await import("nodemailer")).default;
+  const port = Number(SMTP_PORT) || 465;
+  // SMTP_SECURE wins if set; otherwise infer from the port (465 = implicit TLS).
+  const secure =
+    SMTP_SECURE != null ? SMTP_SECURE === "true" : port === 465;
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port,
+    secure,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+  await transporter.sendMail({ from: FROM, to, subject, html });
+}
+
 async function send(to: string, subject: string, html: string): Promise<void> {
-  if (!emailConfigured) {
-    console.info(`[email] not configured — skipping "${subject}" to ${to}`);
+  if (!emailConfigured || !PROVIDER) {
+    console.warn(`[email] not configured — skipping "${subject}" to ${to}`);
     return;
   }
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ from: FROM, to, subject, html }),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      console.error(`[email] send failed ${res.status}: ${await res.text()}`);
+    if (PROVIDER === "smtp") {
+      await sendViaSmtp(to, subject, html);
     } else {
-      console.info(`[email] sent "${subject}" to ${to}`);
+      await sendViaResend(to, subject, html);
     }
+    console.info(`[email:${PROVIDER}] sent "${subject}" to ${to}`);
   } catch (err) {
-    console.error("[email] send error:", err);
+    console.error(`[email:${PROVIDER}] send error:`, err);
   }
 }
 
