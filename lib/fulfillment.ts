@@ -1,5 +1,6 @@
 import "server-only";
 
+import { dbConfigured, query } from "@/lib/db";
 import { sendOrderEmail } from "@/lib/email";
 import { decrementStock, type StockChange } from "@/lib/inventory";
 import { sendTelegram } from "@/lib/notify";
@@ -9,8 +10,31 @@ import {
   setStockDecremented,
   updateStatus,
 } from "@/lib/orders";
-import { sanityWriteClient } from "@/lib/sanity/write-client";
 import type { YooKassaPayment } from "@/lib/yookassa";
+
+/**
+ * Claim a payment for processing exactly once. Inserts an idempotency marker
+ * and returns true only the first time a given payment id is seen. Returns
+ * false when the marker already exists (already processed) or on error.
+ */
+async function claimPayment(
+  paymentId: string,
+  orderId: string | null
+): Promise<boolean> {
+  try {
+    const rows = await query(
+      `insert into processed_payments (payment_id, order_id)
+       values ($1, $2)
+       on conflict (payment_id) do nothing
+       returning payment_id`,
+      [paymentId, orderId]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    console.error(`[fulfillment] claimPayment ${paymentId} failed:`, err);
+    return false;
+  }
+}
 
 function parseItems(meta?: string): StockChange[] {
   return (meta ?? "")
@@ -37,25 +61,18 @@ export async function finalizePaidPayment(
 ): Promise<boolean> {
   if (payment.status !== "succeeded" || !payment.paid) return false;
 
-  // Primary idempotency guard (no PII — lives in the catalogue dataset).
-  if (sanityWriteClient) {
-    try {
-      await sanityWriteClient.create({
-        _id: `processedPayment.${payment.id}`,
-        _type: "processedPayment",
-        orderId: payment.metadata?.orderId ?? null,
-        paidAt: new Date().toISOString(),
-      });
-    } catch {
-      return false; // marker exists → already processed
-    }
+  const orderId = payment.metadata?.orderId;
+
+  // Primary idempotency guard (no PII): claim the payment in Postgres.
+  if (dbConfigured) {
+    const claimed = await claimPayment(payment.id, orderId ?? null);
+    if (!claimed) return false; // already processed
   }
 
-  const orderId = payment.metadata?.orderId;
   const order = orderId ? await getOrder(orderId) : null;
 
-  // Backup guard when no write client / marker is available.
-  if (!sanityWriteClient && order?.paymentStatus === "succeeded") return false;
+  // Backup guard when the database isn't configured.
+  if (!dbConfigured && order?.paymentStatus === "succeeded") return false;
 
   if (!order) {
     console.error(

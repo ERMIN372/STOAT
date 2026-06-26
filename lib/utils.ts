@@ -20,6 +20,28 @@ export function formatPrice(value: number): string {
   }).format(value);
 }
 
+const TRANSLIT: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+  и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+  с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
+  ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+
+/**
+ * Turn a product name into a URL-safe slug, transliterating Cyrillic so the
+ * address looks like `/product/kepka-core-logo`. Used as the product id.
+ */
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .split("")
+    .map((ch) => TRANSLIT[ch] ?? ch)
+    .join("")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+}
+
 /** Build the stable composite key that identifies a cart line (variant). */
 export function buildCartKey(
   productId: string,

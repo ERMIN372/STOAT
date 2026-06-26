@@ -1,158 +1,43 @@
 import "server-only";
 
-import { ordersClient } from "@/lib/sanity/orders-client";
+import { dbConfigured, query } from "@/lib/db";
 import type {
-  DeliveryMethodId,
-  DeliveryProvider,
-} from "@/lib/delivery/types";
+  CreateOrderInput,
+  Order,
+  OrderStatus,
+  StatusHistoryEntry,
+} from "@/lib/orders/types";
 
-export type OrderStatus =
-  | "pending_payment"
-  | "paid"
-  | "processing"
-  | "ready_to_ship"
-  | "shipped"
-  | "delivered"
-  | "canceled"
-  | "refunded";
-
-export type PaymentStatus = "pending" | "succeeded" | "canceled" | "refunded";
-
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  pending_payment: "Ожидает оплаты",
-  paid: "Оплачен",
-  processing: "В подготовке",
-  ready_to_ship: "Готов к отправке",
-  shipped: "Передан в доставку",
-  delivered: "Доставлен",
-  canceled: "Отменён",
-  refunded: "Возврат",
-};
-
-/** Provider labels for the customer-facing copy. */
-export const DELIVERY_PROVIDER_LABELS: Record<DeliveryProvider, string> = {
-  cdek: "СДЭК",
-  russian_post: "Почта России",
-  pickup: "Самовывоз",
-};
-
-export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  pending: "Ожидает оплаты",
-  succeeded: "Оплачено",
-  canceled: "Отменено",
-  refunded: "Возвращено",
-};
-
-/** Statuses the owner can set manually in the admin. */
-export const ADMIN_STATUS_OPTIONS: OrderStatus[] = [
-  "paid",
-  "processing",
-  "ready_to_ship",
-  "shipped",
-  "delivered",
-  "canceled",
-  "refunded",
-];
-
-export interface OrderItem {
-  productId: string;
-  name: string;
-  color: string;
-  size: string;
-  quantity: number;
-  price: number;
-}
+// Re-export the shared order types/constants so existing imports from
+// "@/lib/orders" keep working unchanged.
+export type {
+  OrderStatus,
+  PaymentStatus,
+  OrderItem,
+  OrderDelivery,
+  OrderConsents,
+  StatusHistoryEntry,
+  Order,
+  CreateOrderInput,
+} from "@/lib/orders/types";
+export {
+  ORDER_STATUS_LABELS,
+  DELIVERY_PROVIDER_LABELS,
+  PAYMENT_STATUS_LABELS,
+  ADMIN_STATUS_OPTIONS,
+} from "@/lib/orders/types";
 
 /**
- * Full delivery record saved on the order. Carries everything the engine
- * computed (provider, tariff, price, day windows, address/PVZ, parcel) plus
- * fulfilment fields filled in later from the admin (shipment id, status).
+ * Orders persistence. Customer PII lives in Postgres (DATABASE_URL) — host it
+ * in the Russian Federation to satisfy 152-ФЗ data localisation. No external
+ * SaaS is involved.
  */
-export interface OrderDelivery {
-  provider: DeliveryProvider;
-  method: DeliveryMethodId;
-  label: string;
-  price: number;
-  /** Carrier delivery window (business days). */
-  deliveryMinDays?: number;
-  deliveryMaxDays?: number;
-  /** Preparation window (business days). */
-  productionMinDays?: number;
-  productionMaxDays?: number;
-  /** Total receipt window = preparation + delivery. */
-  totalMinDays?: number;
-  totalMaxDays?: number;
-  /** Destination. */
-  city?: string;
-  address?: string;
-  postalCode?: string;
-  /** CDEK pickup point. */
-  pvzCode?: string;
-  pvzAddress?: string;
-  /** Carrier tariff code. */
-  tariffCode?: string;
-  /** Parcel used for the calculation. */
-  weightGrams?: number;
-  lengthCm?: number;
-  widthCm?: number;
-  heightCm?: number;
-  /** Fulfilment (set later, from the admin). */
-  shipmentId?: string;
-  shipmentStatus?: string;
-}
 
-export interface OrderConsents {
-  offer: boolean;
-  personalData: boolean;
-  marketing: boolean;
-  acceptedAt: string;
-  docVersion: string;
-}
+/** True when the orders database is configured (admin shows a warning if not). */
+export const ordersConfigured = dbConfigured;
 
-export interface StatusHistoryEntry {
-  status: OrderStatus;
-  at: string;
-  note?: string;
-}
-
-export interface Order {
-  orderId: string;
-  status: OrderStatus;
-  paymentStatus: PaymentStatus;
-  customer: {
-    name: string;
-    phone: string;
-    email: string;
-    address: string;
-    comment?: string;
-  };
-  delivery: OrderDelivery;
-  items: OrderItem[];
-  subtotal: number;
-  deliveryPrice: number;
-  total: number;
-  paymentId?: string;
-  trackingNumber?: string;
-  internalNote?: string;
-  consents?: OrderConsents;
-  statusHistory: StatusHistoryEntry[];
-  stockDecremented?: boolean;
-  createdAt: string;
-  paidAt?: string;
-}
-
-const docId = (orderId: string) => `order.${orderId}`;
-const key = () => Math.random().toString(36).slice(2, 12);
-
-export interface CreateOrderInput {
-  orderId: string;
-  customer: Order["customer"];
-  delivery: OrderDelivery;
-  items: OrderItem[];
-  subtotal: number;
-  deliveryPrice: number;
-  total: number;
-  consents?: OrderConsents;
+interface OrderRow {
+  data: Order;
 }
 
 /**
@@ -182,22 +67,28 @@ export async function createOrder(
     createdAt: now,
   };
 
-  if (!ordersClient) {
+  if (!dbConfigured) {
     console.error(
-      "[orders] orders dataset/token not configured — order NOT persisted. " +
-        "Set SANITY_API_TOKEN and create a private dataset (SANITY_ORDERS_DATASET)."
+      "[orders] DATABASE_URL not configured — order NOT persisted. " +
+        "Point it at a Postgres instance hosted in the Russian Federation."
     );
     return { order, persisted: false };
   }
 
   try {
-    await ordersClient.createIfNotExists({
-      _id: docId(input.orderId),
-      _type: "order",
-      ...order,
-      items: input.items.map((i) => ({ _key: key(), ...i })),
-      statusHistory: order.statusHistory.map((h) => ({ _key: key(), ...h })),
-    });
+    await query(
+      `insert into orders (order_id, status, payment_status, total, created_at, data)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (order_id) do nothing`,
+      [
+        order.orderId,
+        order.status,
+        order.paymentStatus,
+        order.total,
+        now,
+        JSON.stringify(order),
+      ]
+    );
     console.info(`[orders] created ${input.orderId} (${input.total} ₽)`);
     return { order, persisted: true };
   } catch (err) {
@@ -207,12 +98,13 @@ export async function createOrder(
 }
 
 export async function getOrder(orderId: string): Promise<Order | null> {
-  if (!ordersClient) return null;
+  if (!dbConfigured) return null;
   try {
-    return await ordersClient.fetch<Order | null>(
-      `*[_type=="order" && orderId==$orderId][0]`,
-      { orderId }
+    const rows = await query<OrderRow>(
+      `select data from orders where order_id = $1`,
+      [orderId]
     );
+    return rows[0]?.data ?? null;
   } catch (err) {
     console.error(`[orders] fetch ${orderId} failed:`, err);
     return null;
@@ -220,68 +112,84 @@ export async function getOrder(orderId: string): Promise<Order | null> {
 }
 
 export async function listOrders(limit = 100): Promise<Order[]> {
-  if (!ordersClient) return [];
+  if (!dbConfigured) return [];
   try {
-    return await ordersClient.fetch<Order[]>(
-      `*[_type=="order"] | order(createdAt desc)[0...$limit]`,
-      { limit }
+    const rows = await query<OrderRow>(
+      `select data from orders order by created_at desc limit $1`,
+      [limit]
     );
+    return rows.map((r) => r.data);
   } catch (err) {
     console.error("[orders] list failed:", err);
     return [];
   }
 }
 
-export async function setPaymentId(orderId: string, paymentId: string) {
-  if (!ordersClient) return;
+/**
+ * Read-modify-write a single order. Loads the row, applies `mutate` to the
+ * stored order, and persists it back along with the queryable columns. No-op
+ * when the order is missing or the database isn't configured.
+ */
+async function updateOrder(
+  orderId: string,
+  mutate: (order: Order) => void
+): Promise<void> {
+  if (!dbConfigured) return;
   try {
-    await ordersClient.patch(docId(orderId)).set({ paymentId }).commit();
+    const order = await getOrder(orderId);
+    if (!order) return;
+    mutate(order);
+    await query(
+      `update orders
+         set status = $2, payment_status = $3, data = $4
+       where order_id = $1`,
+      [orderId, order.status, order.paymentStatus, JSON.stringify(order)]
+    );
   } catch (err) {
-    console.error(`[orders] setPaymentId ${orderId}:`, err);
+    console.error(`[orders] update ${orderId} failed:`, err);
   }
 }
 
-/** Append a status-history entry and apply field changes in one mutation. */
+export async function setPaymentId(orderId: string, paymentId: string) {
+  await updateOrder(orderId, (o) => {
+    o.paymentId = paymentId;
+  });
+}
+
+/** Append a status-history entry and apply field changes in one write. */
 async function transition(
   orderId: string,
   entry: StatusHistoryEntry,
-  set: Record<string, unknown>
+  apply: (order: Order) => void
 ) {
-  if (!ordersClient) return;
-  await ordersClient
-    .patch(docId(orderId))
-    .setIfMissing({ statusHistory: [] })
-    .insert("after", "statusHistory[-1]", [{ _key: key(), ...entry }])
-    .set(set)
-    .commit();
+  await updateOrder(orderId, (o) => {
+    o.statusHistory = [...(o.statusHistory ?? []), entry];
+    apply(o);
+  });
 }
 
 export async function markPaid(orderId: string, paymentId: string) {
   const now = new Date().toISOString();
-  try {
-    await transition(
-      orderId,
-      { status: "paid", at: now, note: "Оплата подтверждена ЮKassa" },
-      { status: "paid", paymentStatus: "succeeded", paidAt: now, paymentId }
-    );
-    console.info(`[orders] ${orderId} → paid`);
-  } catch (err) {
-    console.error(`[orders] markPaid ${orderId}:`, err);
-  }
+  await transition(
+    orderId,
+    { status: "paid", at: now, note: "Оплата подтверждена ЮKassa" },
+    (o) => {
+      o.status = "paid";
+      o.paymentStatus = "succeeded";
+      o.paidAt = now;
+      o.paymentId = paymentId;
+    }
+  );
+  console.info(`[orders] ${orderId} → paid`);
 }
 
 export async function markCanceled(orderId: string, note = "Оплата отменена") {
   const now = new Date().toISOString();
-  try {
-    await transition(
-      orderId,
-      { status: "canceled", at: now, note },
-      { status: "canceled", paymentStatus: "canceled" }
-    );
-    console.info(`[orders] ${orderId} → canceled`);
-  } catch (err) {
-    console.error(`[orders] markCanceled ${orderId}:`, err);
-  }
+  await transition(orderId, { status: "canceled", at: now, note }, (o) => {
+    o.status = "canceled";
+    o.paymentStatus = "canceled";
+  });
+  console.info(`[orders] ${orderId} → canceled`);
 }
 
 export async function updateStatus(
@@ -290,44 +198,29 @@ export async function updateStatus(
   note?: string
 ) {
   const now = new Date().toISOString();
-  const set: Record<string, unknown> = { status };
-  if (status === "refunded") set.paymentStatus = "refunded";
-  try {
-    await transition(orderId, { status, at: now, note }, set);
-    console.info(`[orders] ${orderId} → ${status} (admin)`);
-  } catch (err) {
-    console.error(`[orders] updateStatus ${orderId}:`, err);
-  }
+  await transition(orderId, { status, at: now, note }, (o) => {
+    o.status = status;
+    if (status === "refunded") o.paymentStatus = "refunded";
+  });
+  console.info(`[orders] ${orderId} → ${status} (admin)`);
 }
 
 export async function setTracking(orderId: string, trackingNumber: string) {
-  if (!ordersClient) return;
-  try {
-    await ordersClient.patch(docId(orderId)).set({ trackingNumber }).commit();
-  } catch (err) {
-    console.error(`[orders] setTracking ${orderId}:`, err);
-  }
+  await updateOrder(orderId, (o) => {
+    o.trackingNumber = trackingNumber;
+  });
 }
 
 export async function setInternalNote(orderId: string, internalNote: string) {
-  if (!ordersClient) return;
-  try {
-    await ordersClient.patch(docId(orderId)).set({ internalNote }).commit();
-  } catch (err) {
-    console.error(`[orders] setInternalNote ${orderId}:`, err);
-  }
+  await updateOrder(orderId, (o) => {
+    o.internalNote = internalNote;
+  });
 }
 
 export async function setStockDecremented(orderId: string, value: boolean) {
-  if (!ordersClient) return;
-  try {
-    await ordersClient
-      .patch(docId(orderId))
-      .set({ stockDecremented: value })
-      .commit();
-  } catch (err) {
-    console.error(`[orders] setStockDecremented ${orderId}:`, err);
-  }
+  await updateOrder(orderId, (o) => {
+    o.stockDecremented = value;
+  });
 }
 
 /** Persist carrier shipment data on the order's delivery record. */
@@ -335,16 +228,10 @@ export async function setShipment(
   orderId: string,
   data: { shipmentId?: string; shipmentStatus?: string; trackingNumber?: string }
 ) {
-  if (!ordersClient) return;
-  const set: Record<string, unknown> = {};
-  if (data.shipmentId != null) set["delivery.shipmentId"] = data.shipmentId;
-  if (data.shipmentStatus != null)
-    set["delivery.shipmentStatus"] = data.shipmentStatus;
-  if (data.trackingNumber != null) set.trackingNumber = data.trackingNumber;
-  if (Object.keys(set).length === 0) return;
-  try {
-    await ordersClient.patch(docId(orderId)).set(set).commit();
-  } catch (err) {
-    console.error(`[orders] setShipment ${orderId}:`, err);
-  }
+  await updateOrder(orderId, (o) => {
+    if (data.shipmentId != null) o.delivery.shipmentId = data.shipmentId;
+    if (data.shipmentStatus != null)
+      o.delivery.shipmentStatus = data.shipmentStatus;
+    if (data.trackingNumber != null) o.trackingNumber = data.trackingNumber;
+  });
 }

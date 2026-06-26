@@ -45,7 +45,7 @@ export interface Product {
   category: CategorySlug;
   colors: ProductColor[];
   sizes: string[];
-  /** Image URLs (Sanity CDN) or local paths, e.g. "/products/logo-cap-1.svg". */
+  /** Image URLs (S3 object storage) or local paths, e.g. "/products/cap-1.svg". */
   images: string[];
   description: string;
   inStock: boolean;

@@ -7,7 +7,7 @@ import { SectionHeading } from "@/components/section-heading";
 import { Button } from "@/components/ui/button";
 import { getNewArrivals } from "@/lib/catalog";
 
-// Re-fetch from Sanity at most once a minute so edits в Studio appear live.
+// Re-fetch from the database at most once a minute so admin edits appear live.
 export const revalidate = 60;
 
 export default async function HomePage() {

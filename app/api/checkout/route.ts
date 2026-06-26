@@ -197,8 +197,8 @@ export async function POST(req: Request) {
       `[checkout] order ${orderId} NOT persisted — refusing to create payment`
     );
     await sendTelegram(
-      `⚠️ Заказ ${orderId} НЕ сохранён в Sanity — платёж не создан. ` +
-        `Проверьте SANITY_API_TOKEN и приватный датасет orders.`
+      `⚠️ Заказ ${orderId} НЕ сохранён в БД — платёж не создан. ` +
+        `Проверьте DATABASE_URL (Postgres в РФ) и выполните миграцию.`
     );
     return bad(
       "Не удалось оформить заказ. Попробуйте позже или свяжитесь с нами.",

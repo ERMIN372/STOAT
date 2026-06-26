@@ -54,7 +54,7 @@ export const viewport: Viewport = {
 /**
  * Root layout: html/body, fonts and theme only. The storefront chrome
  * (header/footer/cart/toasts) lives in app/(site)/layout.tsx so that the
- * embedded Sanity Studio at /studio can render full-screen without it.
+ * admin section at /admin can render with its own chrome without it.
  */
 export default function RootLayout({
   children,

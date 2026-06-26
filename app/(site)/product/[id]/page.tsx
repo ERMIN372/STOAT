@@ -14,7 +14,7 @@ import {
   getRelatedProducts,
 } from "@/lib/catalog";
 
-// Refresh product pages from Sanity at most once a minute (ISR).
+// Refresh product pages from the database at most once a minute (ISR).
 export const revalidate = 60;
 
 /** Pre-render the known product pages at build time (SSG). New products added
