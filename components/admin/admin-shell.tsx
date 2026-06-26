@@ -10,13 +10,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container flex h-14 items-center justify-between">
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-2 font-bold uppercase tracking-tight"
-          >
-            <ErmineMark className="h-6 w-6" />
-            STOAT · Заказы
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 font-bold uppercase tracking-tight"
+            >
+              <ErmineMark className="h-6 w-6" />
+              STOAT
+            </Link>
+            <nav className="flex items-center gap-1 text-sm">
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/admin">Заказы</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/admin/products">Товары</Link>
+              </Button>
+            </nav>
+          </div>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
               <Link href="/" target="_blank">

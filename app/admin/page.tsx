@@ -6,8 +6,7 @@ import {
   OrderStatusBadge,
   PaymentStatusBadge,
 } from "@/components/admin/badges";
-import { listOrders } from "@/lib/orders";
-import { ordersConfigured } from "@/lib/sanity/orders-client";
+import { listOrders, ordersConfigured } from "@/lib/orders";
 import { formatPrice } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +25,9 @@ export default async function AdminOrdersPage() {
 
       {!ordersConfigured && (
         <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
-          Хранилище заказов не настроено. Создайте приватный датасет в Sanity и
-          задайте <code>SANITY_API_TOKEN</code> (и при необходимости{" "}
-          <code>SANITY_ORDERS_DATASET</code>).
+          Хранилище заказов не настроено. Задайте <code>DATABASE_URL</code>{" "}
+          (Postgres, размещённый в РФ) и выполните миграцию{" "}
+          <code>npm run db:migrate</code>.
         </div>
       )}
 

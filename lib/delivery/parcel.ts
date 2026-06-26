@@ -1,6 +1,6 @@
 /**
  * Turn a set of cart line items into a single packed parcel (weight + box) for
- * carrier calculations. Uses per-product packaging when present (Sanity), and
+ * carrier calculations. Uses per-product packaging when present, and
  * falls back to sensible per-category defaults so a quote never fails for lack
  * of data.
  */

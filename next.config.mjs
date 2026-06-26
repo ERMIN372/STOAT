@@ -1,10 +1,29 @@
 /** @type {import('next').NextConfig} */
+
+// Product photos are served from an S3-compatible object store in the RF
+// (Yandex Object Storage / VK Cloud / Selectel) or a CDN in front of it. Allow
+// whichever host(s) are configured so next/image can optimise them.
+function imageHosts() {
+  const patterns = [];
+  for (const raw of [process.env.S3_PUBLIC_URL, process.env.S3_ENDPOINT]) {
+    if (!raw) continue;
+    try {
+      const { hostname } = new URL(raw);
+      if (!patterns.some((p) => p.hostname === hostname)) {
+        patterns.push({ protocol: "https", hostname });
+      }
+    } catch {
+      // ignore malformed URLs
+    }
+  }
+  return patterns;
+}
+
 const nextConfig = {
   images: {
-    // Real product photography is uploaded to Sanity and served from its CDN.
-    remotePatterns: [{ protocol: "https", hostname: "cdn.sanity.io" }],
+    remotePatterns: imageHosts(),
     // Local fallback/placeholder art is SVG, which next/image blocks by
-    // default. We only allow it for our own trusted assets; Sanity photos
+    // default. We only allow it for our own trusted assets; real photos
     // (JPG/PNG/WebP) go through the optimizer normally.
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",

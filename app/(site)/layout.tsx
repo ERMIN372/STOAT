@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 /**
  * Storefront chrome. Lives in the (site) route group so it wraps every public
- * page but NOT /studio (the embedded Sanity admin renders full-screen).
+ * page but NOT /admin (the admin section renders with its own chrome).
  */
 export default function SiteLayout({
   children,
