@@ -23,8 +23,12 @@ if (!connectionString) {
 const wantsSsl =
   process.env.DATABASE_SSL === "true" ||
   /[?&]sslmode=(require|verify-ca|verify-full)/.test(connectionString);
-const caPath = process.env.DATABASE_CA_CERT;
-const ca = caPath ? readFileSync(caPath, "utf8") : undefined;
+const caValue = process.env.DATABASE_CA_CERT;
+const ca = caValue
+  ? caValue.includes("-----BEGIN")
+    ? caValue
+    : readFileSync(caValue, "utf8")
+  : undefined;
 const ssl = wantsSsl
   ? {
       ca,

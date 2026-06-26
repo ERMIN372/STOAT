@@ -26,8 +26,7 @@ function buildSsl(): PoolConfig["ssl"] {
     /[?&]sslmode=(require|verify-ca|verify-full)/.test(connectionString ?? "");
   if (!wants) return undefined;
 
-  const caPath = process.env.DATABASE_CA_CERT;
-  const ca = caPath ? safeReadCert(caPath) : undefined;
+  const ca = readCert(process.env.DATABASE_CA_CERT);
   // Verify against the provider CA when available; otherwise allow opting out
   // explicitly (DATABASE_SSL_REJECT_UNAUTHORIZED=false) for first-run setups.
   const rejectUnauthorized =
@@ -35,11 +34,18 @@ function buildSsl(): PoolConfig["ssl"] {
   return { ca, rejectUnauthorized };
 }
 
-function safeReadCert(path: string): string | undefined {
+/**
+ * Resolve the provider CA certificate. Accepts either the PEM text directly
+ * (handy on hosts like Vercel where you can't drop a file — paste it into the
+ * env var) or a path to a .crt file (handy locally).
+ */
+function readCert(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.includes("-----BEGIN")) return value;
   try {
-    return readFileSync(path, "utf8");
+    return readFileSync(value, "utf8");
   } catch (err) {
-    console.warn(`[db] could not read DATABASE_CA_CERT at ${path}:`, err);
+    console.warn(`[db] could not read DATABASE_CA_CERT at ${value}:`, err);
     return undefined;
   }
 }
